@@ -8,6 +8,7 @@ This plan defines future acceptance checks. The [feasibility report](FEASIBILITY
 | --- | --- |
 | Normalization | Missing and null windows, malformed and out-of-range percentages, zero/unknown allowance, mixed units, multiple buckets, overlapping legacy views, sparse updates and invalid timestamps |
 | Freshness and reset | Independent quota and activity expiry, rounded countdowns, clock changes and sleep/resume, refresh at the reset boundary, continued absence, provider-confirmed reset and absence of false recharging |
+| Future reset display | Use an injected clock to compare the same UTC reset in several timezones, including a daylight saving transition and a timezone change while open. Verify local countdown ticks cause zero provider requests, the reset boundary schedules a deduplicated refresh, and stale, expired, missing or invalid times never show a false recharge |
 | Behavior | All supported poses, threshold boundaries, single-window behavior, explicit blocking exhaustion, harmless exhaustion of other buckets, approval precedence, terminal event expiry and unknown states |
 | Events | Duplicates, out-of-order arrival, concurrent sessions, obsolete connections, reconnect snapshots and account or source changes |
 | Content exclusion | Synthetic secret, prompt, code and transcript-path canaries in provider frames, hook input and stderr. None may appear in published state, settings, logs, IPC, renderer or diagnostic export |

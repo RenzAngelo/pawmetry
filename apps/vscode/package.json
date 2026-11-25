@@ -1,0 +1,20 @@
+{
+  "name": "pawmetry-prototype",
+  "displayName": "Pawmetry Prototype",
+  "publisher": "pawmetry-local",
+  "description": "Local Pawmetry quota and activity indicators for development.",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "vscode": "^1.109.0" },
+  "main": "./extension.cjs",
+  "extensionKind": ["ui"],
+  "activationEvents": ["onStartupFinished"],
+  "capabilities": { "untrustedWorkspaces": { "supported": false } },
+  "contributes": {
+    "commands": [
+      { "command": "pawmetry.refreshQuota", "title": "Pawmetry: Refresh Codex Quota" },
+      { "command": "pawmetry.nextSimulation", "title": "Pawmetry: Next Simulation Scenario" },
+      { "command": "pawmetry.stopSimulation", "title": "Pawmetry: Stop Simulation" }
+    ]
+  }
+}

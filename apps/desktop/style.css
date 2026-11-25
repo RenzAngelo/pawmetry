@@ -1,0 +1,20 @@
+:root { color-scheme: dark; font-family: "Segoe UI", sans-serif; color: #f4f9f7; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 10px; }
+.card { height: 298px; padding: 18px; background: #151f24; border: 1px solid #40505a; border-radius: 20px; -webkit-app-region: drag; }
+header, .metric { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+header span { color: #a9e6ca; font-size: 12px; }
+.stage { display: grid; height: 144px; place-items: center; }
+.placeholder { display: flex; justify-content: center; align-items: center; gap: 18px; width: 78px; height: 64px;
+  background: #87d5b1; border: 4px solid #abdcc8; border-radius: 16px; transform: translateY(2px); }
+.placeholder i { width: 7px; height: 13px; background: #263d37; border-radius: 6px; }
+body[data-moving="true"] .placeholder { animation: bounce var(--pace, 800ms) ease-in-out infinite alternate; }
+body[data-pose="sleeping"] .placeholder i { height: 3px; }
+body[data-pose="unknown"] .placeholder, body[data-pose="disconnected"] .placeholder { background: #829196; border-color: #acb5b8; }
+#pose { margin: 0 0 14px; text-align: center; font-weight: 600; }
+.metric { font-size: 13px; margin-top: 10px; }
+.metric label { width: 51px; }
+.metric meter { flex: 1; accent-color: #87d5b1; }
+.metric output { min-width: 36px; text-align: right; }
+@keyframes bounce { to { transform: translateY(-9px); } }
+@media (prefers-reduced-motion: reduce) { .placeholder { animation: none !important; } }

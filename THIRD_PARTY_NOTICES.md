@@ -1,6 +1,6 @@
 # Third-party notices and prior art
 
-Reviewed on 2026-11-25. These upstream projects informed the research. The repository includes no upstream code, artwork or runtime dependencies.
+Reviewed on 2026-11-25. The desktop prototype depends on Electron 45.5.0 under the MIT license. See the lockfile for transitive packages. The repository vendors no upstream artwork. [Electron license](https://github.com/electron/electron/blob/v45.5.0/LICENSE)
 
 | Project and upstream license | Approach documented by maintainers | Pawmetry takeaway |
 | --- | --- | --- |

@@ -27,6 +27,13 @@ On the tested Windows x64 installation, the OpenAI extension bundled the executa
 
 Add `--show-workspace` to display the provider's workspace label locally when supplied. The probe performs one quota read and starts zero agent turns. Tests use synthetic replies and require no sign-in or dependencies. See the [manual comparison procedure](QUOTA_PROBE_REPORT.md#manual-validation).
 
+## Run the prototypes
+
+- Use `npm.cmd run simulate -- recharging` for an offline scenario in the terminal.
+- Use `npm.cmd run activity:probe -- --prepare-disposable` to prepare two temporary workspaces and a loopback receiver. Follow Codex's normal trust review. Native hook execution remains subject to the [manual checks](MANUAL_TESTS.md).
+- Use `npm.cmd ci` and `npm.cmd run desktop` for the Windows simulation companion. The first launch may download the pinned Electron runtime into the repository cache. Run `npm.cmd run desktop:smoke` to exercise the sandboxed renderer without opening a visible pet.
+- Run `& .\tools\test-vscode.ps1` for the local extension-host test with an isolated VS Code profile. For interactive development, launch VS Code with `--extensionDevelopmentPath` pointing to `apps/vscode`. The extension's commands provide an explicit Codex quota refresh and offline simulation. This development extension loads shared code from the repository.
+
 ## Project documents
 
 | Document | Contents |

@@ -23,6 +23,7 @@
 | V2 | MVP | Show connection and source scope, supported allowance values and reset countdowns, and independently verified agent activity |
 | V3 | MVP | User settings and companion commands for show/hide and pause/resume, with a clear desktop-unavailable state |
 | V4 | Required | Work through supported VS Code APIs. Report exact supported host, provider surface and versions |
+| V5 | MVP | Store provider reset instants in UTC. Show local reset times with timezone and daylight saving support and human-readable countdowns. Update countdowns locally and request a refresh after expected reset. Show expired, stale, missing and invalid timestamp states. Require provider evidence before displaying recharge |
 
 ## Pet behavior and customization
 

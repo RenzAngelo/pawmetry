@@ -1,6 +1,6 @@
 # Development plan
 
-Phase 0 and Phase 1 established the design and acceptance criteria. The maintainer approved Probe A. Its implementation and evidence are in the [quota probe report](QUOTA_PROBE_REPORT.md). Probes B and C require separate approval.
+Phase 0 and Phase 1 established the design and acceptance criteria. The maintainer approved local development across the remaining milestones. See the [development status](DEVELOPMENT_STATUS.md) for verified checkpoints and the [manual test list](MANUAL_TESTS.md) for outstanding evidence.
 
 ## Minimal proof of concept
 
@@ -23,7 +23,7 @@ Ship one original animated pet on Windows 11 x64 and a VS Code status bar, Pawme
 | Milestone | Exit gate |
 | --- | --- |
 | 0–1. Research and design | Review the 11 project documents and decide which POC probes to authorize |
-| 2A. Codex quota probe | Implementation and live retrieval verified. Pair three reads with the official UI and confirm both editor windows remain usable before marking acceptance complete |
+| 2A. Codex quota probe | Live retrieval and three paired dashboard comparisons passed. Record two-window conversation continuity and preserve the workspace-label and data-age limits before milestone sign-off |
 | 2B–C. Remaining feasibility probes | After approval, test activity and desktop-plus-extension operation. Decide IPC transport and which verified capabilities enter the MVP |
 | 3. Simulation product slice | Establish the workspaces and canonical branding, build the real overlay and extension shell, add original sprites and pass offline, reconnect and accessibility tests |
 | 4. Windows/Codex MVP | Integrate only the successful provider probes. Pass the capability matrix, failure tests, data-boundary review and clean Windows installation smoke tests |
@@ -32,4 +32,8 @@ Ship one original animated pet on Windows 11 x64 and a VS Code status bar, Pawme
 
 ## Review gate
 
-Finish the manual comparisons in the [quota probe report](QUOTA_PROBE_REPORT.md) before claiming UI parity or expanding into activity or the desktop. The [concurrency design](ARCHITECTURE.md#multiple-windows-projects-and-sessions) defines a centralized quota manager and a separate session registry for later milestones. Probe A tests shared quota keys with synthetic concurrent sessions and performs a single account quota read per run.
+Record two-window conversation continuity before merging Probe A. Its [quota probe report](QUOTA_PROBE_REPORT.md) documents dashboard parity for the tested setup and the outstanding scope limitation. The [concurrency design](ARCHITECTURE.md#multiple-windows-projects-and-sessions) defines a centralized quota manager and a separate session registry for later milestones.
+
+## Recommended next milestone
+
+Finish live validation of Probe B using the disposable workspace runner. Native configuration discovery and synthetic delivery passed. Check actual `PreToolUse` delivery with VS Code visible and minimized, separate overlapping sessions, and verify hook removal and unchanged tool behavior. Keep unsupported or stale activity unknown. Reserve waiting, success and interruption states for independently verified signals. [Codex hooks](https://learn.chatgpt.com/docs/hooks) · [Activity acceptance tests](TEST_PLAN.md#independent-provider-validation)

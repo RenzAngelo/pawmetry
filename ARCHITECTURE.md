@@ -42,6 +42,8 @@ Activity snapshots carry a bounded state, observation time, source and an epheme
 
 Use a deterministic behavior reducer with an injectable clock. Treat activity and energy or stamina as separate channels. Show approval, completion and interruption poses only on matching fresh evidence, and expire temporary outcomes. Use sleep for confirmed blocking exhaustion. A full bucket can coexist with credits or another way to continue, so that fact alone cannot imply sleep. Use an unknown pose or indicator when evidence expires and retain independent indicators for channels that remain fresh. Recharging follows confirmed recovery or a reset. Cosmetic speed thresholds leave numeric readings intact.
 
+For the future UI, store each validated reset as a UTC instant and format it for the user's current timezone, including daylight saving at the reset instant. Calculate human-readable countdowns from the difference between UTC instants. Local display ticks require no provider read. At or after the expected reset, deduplicate refreshes per quota scope and use bounded retries if the provider has no fresh result. Recompute on clock changes and resume from sleep. Distinguish expired and stale values from missing or invalid timestamps. Keep allowance unknown after expiry until refreshed evidence arrives, and show recharge only after provider confirmation.
+
 ## Multiple windows, projects and sessions
 
 The desktop main process will host one quota manager and one session registry per interactive Windows user session. Each local VS Code extension host can reconnect to that coordinator and receive an initial snapshot followed by updates. Local CLI, IDE and desktop agents can publish separately when the relevant adapter can observe their documented events. An editor window can own several local project folders and several conversations. A project can have concurrent conversations in several windows and other clients.
@@ -59,7 +61,7 @@ The desktop main process will host one quota manager and one session registry pe
 
 **Unified display.** The first mode shows one pet reflecting observed concurrent activity, with deterministic handling of simultaneous events and a shared quota view for the selected scope. The dashboard can identify independent session states or report unknown. Multiple quota scopes remain separate. Later modes may follow a selected project, workspace or provider and may introduce multiple pets.
 
-This milestone implements the quota-scope model and its synthetic sharing tests. The coordinator, polling, registry, IPC and display modes are future work. [Quota probe report](QUOTA_PROBE_REPORT.md)
+The quota manager and session registry now run in memory and have synthetic concurrency coverage. The activity probe uses a per-run loopback capability in disposable workspaces, separate from the planned desktop IPC. The desktop prototype uses offline simulation while native IDE activity and the IPC transport remain under validation. [Development status](DEVELOPMENT_STATUS.md)
 
 ## Desktop and IPC
 
