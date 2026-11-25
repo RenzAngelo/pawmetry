@@ -2,58 +2,124 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
 <title>Pawmetry Settings</title>
+<link rel="stylesheet" href="./tokens.css">
 <link rel="stylesheet" href="./settings.css">
-<main>
-  <header>
-    <h1>Pawmetry Settings</h1>
-    <nav aria-label="Settings sections"><a href="#connection">Connection</a><a href="#appearance">Appearance</a><a href="#notifications">Notifications</a></nav>
+<div class="shell">
+  <aside>
+    <header><strong>Pawmetry</strong><span>Settings</span></header>
+    <nav aria-label="Settings sections">
+      <button data-section="general" aria-controls="general"><i class="icon icon-sliders-horizontal" aria-hidden="true"></i>General</button>
+      <button data-section="connections" aria-controls="connections"><i class="icon icon-link" aria-hidden="true"></i>Connections</button>
+      <button data-section="appearance" aria-controls="appearance"><i class="icon icon-palette" aria-hidden="true"></i>Appearance</button>
+      <button data-section="behavior" aria-controls="behavior"><i class="icon icon-activity" aria-hidden="true"></i>Behavior</button>
+      <button data-section="notifications" aria-controls="notifications"><i class="icon icon-bell" aria-hidden="true"></i>Notifications</button>
+      <button data-section="shortcuts" aria-controls="shortcuts"><i class="icon icon-keyboard" aria-hidden="true"></i>Shortcuts</button>
+      <button data-section="advanced" aria-controls="advanced"><i class="icon icon-flask-conical" aria-hidden="true"></i>Advanced</button>
+      <button data-section="about" aria-controls="about"><i class="icon icon-info" aria-hidden="true"></i>About</button>
+    </nav>
+  </aside>
+  <main id="content">
     <p id="settings-error" role="status"></p>
-  </header>
-  <section id="connection" aria-labelledby="connection-title">
-    <h2 id="connection-title">Codex connection</h2>
-    <div class="panel">
-      <h3>Account quota</h3>
-      <p id="quota-state" class="state" role="status">Checking</p>
-      <p>Energy, stamina and resets come from the account quota reader. Quota works independently of activity.</p>
-      <div class="actions"><button id="toggle-quota" type="button">Enable live quota</button><button data-action="refresh" type="button">Refresh quota</button></div>
-    </div>
-    <div class="panel">
-      <h3>Project activity</h3>
-      <p id="activity-state" class="state" role="status">Checking</p>
-      <p id="activity-detail"></p>
-      <p id="activity-issue" role="status"></p>
-      <div class="actions">
-        <button id="start-activity" data-action="start-activity" type="button">Create two disposable workspaces</button>
-        <button id="check-hooks" data-action="check-hooks" type="button" hidden>Check hook files</button>
-        <button id="stop-activity" data-action="stop-activity" type="button" hidden>Disconnect and remove disposable hooks</button>
+    <section id="general" aria-labelledby="general-title">
+      <h1 id="general-title" tabindex="-1">General</h1>
+      <div class="panel settings-grid" id="general-fields"></div>
+      <div class="panel" id="startup" hidden>
+        <h2>Windows startup</h2>
+        <div class="actions"><button data-action="start-at-login">Enable at sign-in…</button><button data-action="remove-at-login">Remove from startup…</button></div>
       </div>
-      <div id="workspace-instructions" hidden>
-        <ol>
-          <li>Copy each folder path and open it in its own local VS Code window.</li>
-          <li>Review the generated <code>.codex/hooks.json</code> and approve those exact definitions in Codex’s native hook review if you agree. Pawmetry cannot read the IDE’s approval decision.</li>
-          <li>Try a model-only turn or a benign tool action in the disposable workspace. Return here to see whether an event arrived.</li>
-        </ol>
-        <div id="workspaces"></div>
+    </section>
+    <section id="connections" aria-labelledby="connections-title" hidden>
+      <h1 id="connections-title" tabindex="-1">Connections</h1>
+      <div class="panel">
+        <h2>Codex account quota</h2>
+        <p id="quota-state" class="state" role="status">Checking</p>
+        <p>Show energy, stamina and reset times for your Codex account.</p>
+        <div class="actions"><button class="primary" id="toggle-quota">Enable live quota</button><button data-action="refresh">Refresh quota</button></div>
       </div>
-      <p id="retained-paths"></p>
-    </div>
-    <button id="toggle-monitoring" type="button">Pause monitoring</button>
-  </section>
-  <section id="appearance" aria-labelledby="appearance-title">
-    <h2 id="appearance-title">Appearance and controls</h2>
-    <div class="settings-grid" id="appearance-fields"></div>
-  </section>
-  <section id="notifications" aria-labelledby="notifications-title">
-    <h2 id="notifications-title">Notifications</h2>
-    <div class="settings-grid" id="notification-fields"></div>
-    <div class="actions"><button data-action="test-notice" type="button">Test notification</button></div>
-  </section>
-  <section id="startup" aria-labelledby="startup-title" hidden>
-    <h2 id="startup-title">Windows startup</h2>
-    <div class="actions"><button data-action="start-at-login" type="button">Enable at sign-in…</button><button data-action="remove-at-login" type="button">Remove from startup…</button></div>
-  </section>
-</main>
+      <div class="panel">
+        <h2>Codex project activity</h2>
+        <p id="activity-state" class="state" role="status">Checking</p>
+        <p id="activity-detail"></p>
+        <p id="activity-issue" role="status"></p>
+        <div class="actions"><button id="open-wizard" class="primary">Set up activity</button></div>
+        <div id="wizard" hidden>
+          <div id="setup-install" data-step="install">
+            <h3>Find Codex</h3>
+            <p id="installed-codex" role="status"></p>
+            <div class="actions"><button data-action="detect-codex">Check again</button><button class="primary" data-go="scope">Choose scope <i class="icon icon-chevron-right" aria-hidden="true"></i></button></div>
+          </div>
+          <div data-step="scope" hidden>
+            <h3>Choose what to monitor</h3>
+            <fieldset class="scope"><legend class="sr-only">Monitoring scope</legend>
+              <label><input type="radio" name="activity-scope" value="user" checked> <span><strong>All local projects using this Codex profile</strong><small>One user-level hook file. It can also apply to local CLI sessions using the same profile.</small></span></label>
+              <label><input type="radio" name="activity-scope" value="project"> <span><strong>One project</strong><small>A project hook file. Codex loads it only from trusted project settings.</small></span></label>
+            </fieldset>
+            <div class="actions"><button data-go="install">Back</button><button class="primary" data-go="review">Review permissions</button></div>
+          </div>
+          <div data-step="review" hidden>
+            <h3>Review permissions</h3>
+            <button id="preview-project" data-action="select-project" hidden>Choose project for preview…</button>
+            <p id="preview-path" class="file-path"></p>
+            <p id="profile-note"></p>
+            <p>Native Codex review controls whether the local Pawmetry helper can run. The helper keeps only event type, timing and opaque identifiers. It discards prompts, tool input and output, and paths supplied by Codex.</p>
+            <p>Setup for existing projects is pending native VS Code validation. This preview does not edit configuration or change trust.</p>
+            <div class="actions"><button data-go="scope">Back</button><button class="primary" data-section="advanced">Open diagnostics</button><button id="close-wizard">Done</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section id="appearance" aria-labelledby="appearance-title" hidden>
+      <h1 id="appearance-title" tabindex="-1">Appearance</h1>
+      <div class="panel settings-grid" id="appearance-fields"></div>
+    </section>
+    <section id="behavior" aria-labelledby="behavior-title" hidden>
+      <h1 id="behavior-title" tabindex="-1">Behavior</h1>
+      <div class="panel settings-grid" id="behavior-fields"></div>
+      <div class="panel"><h2>Monitoring</h2><button id="toggle-monitoring">Pause monitoring</button></div>
+    </section>
+    <section id="notifications" aria-labelledby="notifications-title" hidden>
+      <h1 id="notifications-title" tabindex="-1">Notifications</h1>
+      <div class="panel settings-grid" id="notification-fields"></div>
+      <div class="actions"><button data-action="test-notice">Test notification</button></div>
+    </section>
+    <section id="shortcuts" aria-labelledby="shortcuts-title" hidden>
+      <h1 id="shortcuts-title" tabindex="-1">Shortcuts</h1>
+      <div class="panel settings-grid" id="shortcut-fields"></div>
+    </section>
+    <section id="advanced" aria-labelledby="advanced-title" hidden>
+      <h1 id="advanced-title" tabindex="-1">Advanced</h1>
+      <div class="panel">
+        <h2>Diagnostics</h2>
+        <p>Use disposable workspaces to verify that your Codex client delivers native activity before connecting real projects.</p>
+        <p id="diagnostic-state" class="state" role="status"></p>
+        <div class="actions">
+          <button id="start-activity" data-action="start-activity">Create two disposable workspaces</button>
+          <button id="check-hooks" data-action="check-hooks" hidden>Check hook files</button>
+          <button id="stop-activity" data-action="stop-activity" hidden>Disconnect and remove disposable hooks</button>
+        </div>
+        <div id="workspace-instructions" hidden>
+          <ol>
+            <li>Open each folder in its own local VS Code window.</li>
+            <li>Review the generated <code>.codex/hooks.json</code> and approve those exact definitions in native Codex if you agree.</li>
+            <li>Try a model-only turn or a benign tool action. Look for events below.</li>
+          </ol>
+          <div id="workspaces"></div>
+        </div>
+        <p id="retained-paths"></p>
+      </div>
+      <div class="panel">
+        <h2>Simulation</h2>
+        <p>Preview the pet using simulated quota and activity.</p>
+        <div class="actions"><button data-action="simulate-quota">Use simulation</button><button id="next-scenario" data-action="next-scenario">Next scenario</button></div>
+      </div>
+    </section>
+    <section id="about" aria-labelledby="about-title" hidden>
+      <h1 id="about-title" tabindex="-1">About</h1>
+      <div class="panel"><h2>Pawmetry</h2><p>Local development build</p><p>Windows companion for Codex quota and activity. Interface icons by Lucide.</p></div>
+    </section>
+  </main>
+</div>
 <script src="./settings.js"></script>
 </html>

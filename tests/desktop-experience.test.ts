@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { defaults, dimensions, fitBounds, loadPreferences, placeSettings, preferences, savePreferences } from "../apps/desktop/preferences.ts";
 import { validSetting } from "../apps/desktop/settings-model.ts";
+import { enrollmentTargets } from "../apps/desktop/activity-setup.ts";
 import { quotaAlerts } from "../apps/desktop/quota-alerts.ts";
 import { animationStyle, frameAt, motionFor, prototypeProfile } from "../packages/animation/animation.ts";
 import type { Status } from "../packages/ipc/protocol.ts";
@@ -63,6 +64,19 @@ test("Settings accepts only named preferences with exact bounded values", () => 
   assert.equal(validSetting("mode", "hide", monitors), false);
   assert.equal(validSetting("settingsBounds", { x: 0 }, monitors), false);
   assert.equal(validSetting("__proto__", {}, monitors), false);
+  assert.equal(validSetting("theme", "light", monitors), true);
+  assert.equal(preferences({ theme: "system" }).theme, "system");
+  assert.equal(preferences({ theme: "off" }).theme, "dark");
+});
+
+test("activity previews target only an absolute local profile or selected project", () => {
+  assert.deepEqual(enrollmentTargets("C:\\Users\\Example", undefined, "D:\\Games\\Project"), {
+    user: "C:\\Users\\Example\\.codex\\hooks.json", project: "D:\\Games\\Project\\.codex\\hooks.json", customProfile: false,
+  });
+  assert.deepEqual(enrollmentTargets("C:\\Users\\Example", "C:\\Local Codex", "\\\\host\\work\\project"), {
+    user: "C:\\Local Codex\\hooks.json", project: null, customProfile: true,
+  });
+  assert.equal(enrollmentTargets("C:\\Users\\Example", ".\\custom", null).user, null);
 });
 
 test("low-quota alerts require opt-in fresh live data and rearm only after recovery", () => {

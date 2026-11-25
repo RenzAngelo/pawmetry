@@ -7,6 +7,7 @@ export type DisplayMode = "pet" | "compact" | "dashboard";
 export type Size = "small" | "standard" | "large";
 export const modes = ["pet", "compact", "dashboard"] as const;
 export const sizes = ["small", "standard", "large"] as const;
+export const themes = ["dark", "light", "system"] as const;
 export const dimensions: Record<DisplayMode, Record<Size, readonly [number, number]>> = {
   pet: { small: [136, 116], standard: [160, 136], large: [200, 166] },
   compact: { small: [252, 225], standard: [284, 250], large: [336, 275] },
@@ -14,7 +15,7 @@ export const dimensions: Record<DisplayMode, Record<Size, readonly [number, numb
 };
 export const shortcuts = ["CommandOrControl+Alt+Shift+P", "CommandOrControl+Alt+Shift+F10"] as const;
 export type Preferences = AlertSettings & {
-  bounds: Bounds | null; settingsBounds: Bounds | null; alwaysOnTop: boolean; reducedMotion: boolean;
+  bounds: Bounds | null; settingsBounds: Bounds | null; alwaysOnTop: boolean; reducedMotion: boolean; theme: (typeof themes)[number];
   mode: DisplayMode; hidden: boolean; windowSizes: Record<DisplayMode, Size>; petSize: Size;
   backgroundOpacity: number; petOpacity: number; speed: number; monitor: number | null;
   energyBar: boolean; staminaBar: boolean; hoverInfo: boolean; roaming: boolean; clickThrough: boolean;
@@ -22,7 +23,7 @@ export type Preferences = AlertSettings & {
 };
 
 export const defaults: Preferences = {
-  bounds: null, settingsBounds: null, alwaysOnTop: true, reducedMotion: false,
+  bounds: null, settingsBounds: null, alwaysOnTop: true, reducedMotion: false, theme: "dark",
   alerts: { lowEnergy: "off", lowStamina: "off", restoredEnergy: "off", restoredStamina: "off", exhaustion: "off" },
   lowThresholds: { energy: 20, stamina: 20 }, quietHours: false,
   mode: "dashboard", hidden: false, windowSizes: { pet: "standard", compact: "standard", dashboard: "standard" },
@@ -53,6 +54,7 @@ export function preferences(value: unknown): Preferences {
   }
   const thresholds = source.lowThresholds as Partial<Preferences["lowThresholds"]> | undefined;
   return { bounds: cleaned, settingsBounds: parseBounds(source.settingsBounds, 200, 10_000),
+    theme: themes.find((item) => item === source.theme) ?? defaults.theme,
     alwaysOnTop: source.alwaysOnTop !== false, reducedMotion: source.reducedMotion === true,
     alerts, lowThresholds: { energy: number(thresholds?.energy, 5, 50, 20), stamina: number(thresholds?.stamina, 5, 50, 20) },
     quietHours: source.quietHours === true,

@@ -5,11 +5,17 @@ for (const [command, button] of Object.entries(commands)) {
   button.addEventListener("mousedown", (event) => { if (event.button === 0) event.preventDefault(); });
   button.addEventListener("click", () => { void window.pawmetry.command(command).catch(() => {}); });
 }
+window.pawmetry.onFocusOptions(() => commands.more.focus());
+commands.more.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown") { event.preventDefault(); commands.more.click(); }
+});
 const activityText = { unconfigured: "Activity not configured", starting: "Starting activity receiver", review: "Hook review required",
   working: "Codex activity · working", interrupted: "Codex activity · interrupted", stale: "Codex activity · stale",
   disconnected: "Codex activity · disconnected", paused: "Activity monitoring paused",
   "no-active-sessions": "No observable active sessions" };
 window.pawmetry.onView(({ pet, motion, mode, quota, resets, notice, activity, observing, presentation }) => {
+  document.documentElement.dataset.theme = presentation.theme;
+  document.documentElement.dataset.reducedMotion = String(presentation.reducedMotion);
   document.body.dataset.pose = pet.pose;
   document.body.dataset.motion = motion.motion;
   document.body.dataset.moving = String(!motion.frozen);
@@ -32,12 +38,7 @@ window.pawmetry.onView(({ pet, motion, mode, quota, resets, notice, activity, ob
   put(document.querySelector("#mode"), label);
   put(document.querySelector("#activity"), activityText[activity] ?? "Codex activity · unknown");
   commands["toggle-top"].setAttribute("aria-pressed", String(presentation.alwaysOnTop));
-  const animation = commands["toggle-animation"];
-  animation.setAttribute("aria-pressed", String(presentation.paused));
-  animation.setAttribute("aria-label", presentation.paused ? "Resume animations" : "Pause animations");
-  animation.title = animation.getAttribute("aria-label");
-  put(animation, presentation.paused ? "▶" : "Ⅱ");
-  commands.refresh.disabled = mode !== "live" || presentation.monitoringPaused;
+  commands.more.setAttribute("aria-expanded", String(presentation.menuOpen));
   put(document.querySelector("#quota-notice"), notice);
   for (const metric of ["energy", "stamina"]) {
     const value = pet[metric];

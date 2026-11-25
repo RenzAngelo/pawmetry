@@ -10,7 +10,7 @@ import { discoverCodex } from "../tools/codex-quota-probe/discovery.ts";
 import { hookConfig } from "../tools/codex-activity-probe/receiver.ts";
 
 test("native Codex discovers independent disposable workspace hooks without approving or running them",
-  { skip: process.platform !== "win32" || process.env.PAWMETRY_NATIVE_HOOKS_TEST !== "1", timeout: 20_000 },
+  { skip: process.platform !== "win32" || process.env.PAWMETRY_NATIVE_HOOKS_TEST !== "1", timeout: 30_000 },
   async () => {
     const installed = await discoverCodex();
     assert.equal(installed.status, "found");
@@ -32,7 +32,7 @@ test("native Codex discovers independent disposable workspace hooks without appr
         'cli_auth_credentials_store="file"', "-c", "features.apps=false"],
         { cwd: workspaces[0], env, windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
       const closed = once(child, "close");
-      const deadline = setTimeout(() => child.kill(), 15_000);
+      const deadline = setTimeout(() => child.kill(), 24_000);
       child.stdin.on("error", () => {});
       const output = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
       let id = 0;
@@ -54,7 +54,7 @@ test("native Codex discovers independent disposable workspace hooks without appr
         assert.equal(data.length, 2);
         return data.map((entry: { errors: unknown[]; hooks: Array<{ source: string; eventName: string; trustStatus: string }> }) => {
           assert.equal(entry.errors.length, 0);
-          return entry.hooks.filter((hook) => hook.source === "project");
+          return entry.hooks.filter((hook) => hook.source === "project" || hook.source === "user");
         });
       };
       try {
@@ -73,6 +73,14 @@ test("native Codex discovers independent disposable workspace hooks without appr
         await unlink(files[0]);
         assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 8]);
         await unlink(files[1]);
+        assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 0]);
+        const userHooks = join(profile, "hooks.json");
+        await writeFile(userHooks, configs[0], { flag: "wx" });
+        for (const hooks of await list()) {
+          assert.equal(hooks.length, 8);
+          assert.ok(hooks.every((hook: { source: string; trustStatus: string }) => hook.source === "user" && hook.trustStatus === "untrusted"));
+        }
+        await unlink(userHooks);
         assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 0]);
       } finally {
         child.stdin.end();

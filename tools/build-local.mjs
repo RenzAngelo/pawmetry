@@ -29,12 +29,17 @@ const common = [
   "packages/simulation/scenarios.ts", "packages/behavior/behavior.ts",
 ];
 await copy(common, desktopApp);
+const icons = ["activity", "bell", "check", "chevron-right", "ellipsis", "flask-conical", "info", "keyboard", "layout-dashboard", "link",
+  "log-out", "minus", "mouse-pointer-2", "palette", "panel-top", "pause", "pin", "play", "refresh-cw", "settings", "sliders-horizontal", "square"];
+await copy([...icons.map((name) => `apps/desktop/icons/${name}.svg`), "apps/desktop/icons/LICENSE", "apps/desktop/icons/LICENSE.feather"], desktopApp);
 await copy([
   "apps/desktop/index.html", "apps/desktop/live-quota.ts", "apps/desktop/main.mjs",
   "apps/desktop/preferences.ts", "apps/desktop/preload.cjs", "apps/desktop/quota-alerts.ts",
   "apps/desktop/renderer.js", "apps/desktop/style.css", "packages/animation/animation.ts",
   "apps/desktop/local-window.mjs", "apps/desktop/settings-window.mjs", "apps/desktop/settings-model.ts",
   "apps/desktop/settings-preload.cjs", "apps/desktop/settings.html", "apps/desktop/settings.js", "apps/desktop/settings.css",
+  "apps/desktop/activity-setup.ts", "apps/desktop/tokens.css",
+  "apps/desktop/menu-window.mjs", "apps/desktop/menu-preload.cjs", "apps/desktop/menu.html", "apps/desktop/menu.js", "apps/desktop/menu.css",
   "packages/telemetry/quota-manager.ts", "tools/codex-quota-probe/app-server.ts",
   "tools/codex-quota-probe/discovery.ts", "tools/codex-quota-probe/quota.ts", "tools/codex-quota-probe/telemetry.ts",
   "tools/codex-activity-probe/hook.ts", "tools/codex-activity-probe/protocol.ts",

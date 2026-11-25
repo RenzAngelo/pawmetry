@@ -9,20 +9,28 @@ const pct = (values) => values.map((value) => [value, (value * 100) + "%"]);
 const alertMode = ["off", "silent", "sound"].map((value) => [value, upper(value)]);
 let snapshot;
 let updating = false;
+const pages = [...document.querySelectorAll("main > section")];
+const links = [...document.querySelectorAll("[data-section]")];
+let setupStep = "install";
 
 function options(input, choices) {
   input.replaceChildren(...choices.map(([, text], index) => new Option(text, String(index))));
 }
 
-function field(group, key, title, choices) {
+function field(group, key, title, choices, slider = false) {
   const wrapper = document.createElement("label");
   const caption = document.createElement("span");
   caption.textContent = title;
-  const input = document.createElement(choices ? "select" : "input");
+  const input = document.createElement(choices && !slider ? "select" : "input");
   input.id = "setting-" + key;
-  const row = { input, choices };
-  if (choices) options(input, choices);
-  else { input.type = "checkbox"; wrapper.classList.add("check"); }
+  const row = { input, choices, slider };
+  if (slider) {
+    input.type = "range";
+    input.min = "0";
+    input.max = String(choices.length - 1);
+    input.addEventListener("input", () => updateSlider(row));
+  } else if (choices) options(input, choices);
+  else { input.type = "checkbox"; input.setAttribute("role", "switch"); wrapper.classList.add("check"); }
   input.addEventListener("change", async () => {
     if (updating) return;
     try { put(byId("settings-error"), await api.update(key, choices ? row.choices[Number(input.value)][0] : input.checked)); }
@@ -34,19 +42,61 @@ function field(group, key, title, choices) {
   fields.set(key, row);
 }
 
+function updateSlider({ input, choices }) {
+  input.setAttribute("aria-valuetext", choices[Number(input.value)][1]);
+  input.title = input.getAttribute("aria-valuetext");
+}
+
+function showSection(name, moveFocus = false) {
+  for (const page of pages) page.hidden = page.id !== name;
+  for (const link of links) {
+    if (!link.closest("nav")) continue;
+    if (link.dataset.section === name) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  byId("content").scrollTop = 0;
+  if (moveFocus) byId(name + "-title").focus();
+}
+
+function showSetupStep(step) {
+  setupStep = step;
+  for (const entry of document.querySelectorAll("[data-step]")) entry.hidden = entry.dataset.step !== step;
+  if (snapshot) renderSetup(snapshot);
+  document.querySelector(`[data-step="${step}"] h3`).tabIndex = -1;
+  document.querySelector(`[data-step="${step}"] h3`).focus();
+}
+
+function renderSetup({ codexInstall, targets }) {
+  const info = { unchecked: "Codex has not been checked.", checking: "Looking for local Codex…",
+    found: `Found the local Windows VS Code Codex bundle (${codexInstall.version}).`,
+    ambiguous: "Multiple Codex bundles were found. Pawmetry cannot identify which one VS Code is using.",
+    missing: "No supported local VS Code Codex bundle was found in the default location.",
+    unsupported: "Automatic detection is available for the local Windows x64 VS Code bundle." };
+  put(byId("installed-codex"), info[codexInstall.status]);
+  if (setupStep !== "review") return;
+  const project = document.querySelector('[name="activity-scope"]:checked').value === "project";
+  byId("preview-project").hidden = !project;
+  put(byId("preview-path"), (project ? targets.project : targets.user) ?? (project ? "Choose a local project to preview its hook file." : "This profile path could not be determined safely."));
+  put(byId("profile-note"), project ? "Scope: this selected project. Existing hooks would be preserved."
+    : targets.customProfile ? "This preview uses CODEX_HOME from Pawmetry. Confirm that VS Code uses the same profile."
+      : "Scope: the default local Codex profile. Confirm that VS Code uses this profile.");
+}
+
 const appearance = "appearance-fields";
+field(appearance, "theme", "Theme", [["dark", "Dark"], ["light", "Light"], ["system", "Follow system"]]);
 field(appearance, "mode", "Display mode", displayModes);
 field(appearance, "windowSize", "Window size", sizes);
 field(appearance, "petSize", "Pet size", sizes);
-field(appearance, "backgroundOpacity", "Background opacity", pct([0, 0.5, 0.8, 1]));
-field(appearance, "petOpacity", "Pet opacity", pct([0.5, 0.75, 1]));
-field(appearance, "speed", "Animation speed", [0.5, 1, 1.5, 2].map((value) => [value, value + "×"]));
-field(appearance, "monitor", "Monitor", [[null, "Follow the pet"]]);
-field(appearance, "shortcut", "Global show/hide shortcut", [[null, "Off"],
+field(appearance, "backgroundOpacity", "Background opacity", pct([0, 0.5, 0.8, 1]), true);
+field(appearance, "petOpacity", "Pet opacity", pct([0.5, 0.75, 1]), true);
+field("behavior-fields", "speed", "Animation speed", [0.5, 1, 1.5, 2].map((value) => [value, value + "×"]), true);
+field("general-fields", "monitor", "Monitor", [[null, "Follow the pet"]]);
+field("shortcut-fields", "shortcut", "Global show/hide shortcut", [[null, "Off"],
   ["CommandOrControl+Alt+Shift+P", "Ctrl+Alt+Shift+P"], ["CommandOrControl+Alt+Shift+F10", "Ctrl+Alt+Shift+F10"]]);
-for (const [key, title] of [["alwaysOnTop", "Always on top"], ["clickThrough", "Click-through"], ["reducedMotion", "Reduced motion"],
-  ["energyBar", "Energy bar"], ["staminaBar", "Stamina bar"], ["hoverInfo", "Show information on hover"], ["roaming", "Roam within the window"]]) {
-  field(appearance, key, title);
+for (const [group, key, title] of [["general-fields", "alwaysOnTop", "Always on top"], ["general-fields", "clickThrough", "Click-through"],
+  ["behavior-fields", "reducedMotion", "Reduced motion"], [appearance, "energyBar", "Energy bar"], [appearance, "staminaBar", "Stamina bar"],
+  [appearance, "hoverInfo", "Show information on hover"], ["behavior-fields", "roaming", "Roam within the window"]]) {
+  field(group, key, title);
 }
 const notifications = "notification-fields";
 for (const [key, title] of [["lowEnergy", "Low energy"], ["lowStamina", "Low stamina"], ["restoredEnergy", "Energy restored"],
@@ -57,7 +107,7 @@ for (const meter of ["energy", "stamina"]) {
 field(notifications, "quietHours", "Quiet hours (10 pm to 7 am)");
 
 const activityLabels = {
-  unconfigured: ["Activity monitoring not configured", "Create disposable workspaces to test the native Codex hook connection."],
+  unconfigured: ["Activity monitoring not configured", "Review whether to connect your local Codex profile or a single project."],
   starting: ["Preparing disposable workspaces", "Pawmetry is starting the local activity receiver."],
   stopping: ["Disconnecting activity", "Pawmetry is removing its unchanged disposable hook files."],
   review: ["Native hook approval required", "The receiver is waiting for its first event. Use native Codex review to confirm approval. Approved hooks may still be waiting for an observable event."],
@@ -108,16 +158,21 @@ function render(view) {
   snapshot = view;
   updating = true;
   const { preferences, activity } = view;
+  document.documentElement.dataset.theme = preferences.theme;
+  document.documentElement.dataset.reducedMotion = String(preferences.reducedMotion);
+  renderSetup(view);
   const displayChoices = [[null, "Follow the pet"], ...view.displays.map(({ id, label }) => [id, label])];
   const monitor = fields.get("monitor");
   if (JSON.stringify(monitor.choices) !== JSON.stringify(displayChoices)) { monitor.choices = displayChoices; options(monitor.input, displayChoices); }
   const values = { ...preferences, windowSize: preferences.windowSizes[preferences.mode], energyThreshold: preferences.lowThresholds.energy,
     staminaThreshold: preferences.lowThresholds.stamina };
-  for (const [key, { input, choices }] of fields) {
+  for (const [key, row] of fields) {
+    const { input, choices } = row;
     const value = key.startsWith("alert-") ? preferences.alerts[key.slice(6)] : values[key];
     if (choices) {
       const index = choices.findIndex(([item]) => item === value);
-      if (index >= 0) input.value = String(index);
+      if (index >= 0 && input.value !== String(index)) input.value = String(index);
+      if (row.slider) updateSlider(row);
     } else input.checked = value;
   }
   updating = false;
@@ -128,6 +183,7 @@ function render(view) {
   put(byId("toggle-monitoring"), view.monitoringPaused ? "Resume monitoring" : "Pause monitoring");
   const [label, detail] = activity.available ? activityLabels[activity.state] : ["Activity unsupported on this platform", "Disposable activity setup currently requires Windows."];
   put(byId("activity-state"), label);
+  put(byId("diagnostic-state"), label);
   put(byId("activity-detail"), detail);
   put(byId("activity-issue"), activity.issue);
   put(byId("retained-paths"), activity.retainedPaths.join(" · "));
@@ -137,6 +193,7 @@ function render(view) {
   byId("start-activity").hidden = prepared || !activity.available;
   byId("start-activity").disabled = activity.state === "starting" || activity.state === "stopping";
   byId("startup").hidden = !view.canSetStartup;
+  byId("next-scenario").disabled = view.liveSelected || view.monitoringPaused;
   workspaces(activity.workspaces);
 }
 
@@ -151,7 +208,12 @@ async function action(name) {
   try { render(await api.action(name)); } catch { put(byId("settings-error"), "The Settings command could not reach Pawmetry."); }
 }
 for (const button of document.querySelectorAll("[data-action]")) button.addEventListener("click", () => action(button.dataset.action));
+for (const link of links) link.addEventListener("click", () => showSection(link.dataset.section, true));
+for (const button of document.querySelectorAll("[data-go]")) button.addEventListener("click", () => showSetupStep(button.dataset.go));
+byId("open-wizard").addEventListener("click", () => { byId("wizard").hidden = false; showSetupStep("install"); });
+byId("close-wizard").addEventListener("click", () => { byId("wizard").hidden = true; byId("open-wizard").focus(); });
 byId("toggle-quota").addEventListener("click", () => { if (snapshot) void action(snapshot.liveSelected ? "simulate-quota" : "live-quota"); });
 byId("toggle-monitoring").addEventListener("click", () => { if (snapshot) void action(snapshot.monitoringPaused ? "resume-monitoring" : "pause-monitoring"); });
 api.onView(render);
+showSection("general");
 void read();

@@ -1,6 +1,8 @@
 # Third-party notices and prior art
 
-Reviewed on 2026-11-25. The desktop prototype depends on Electron 45.5.0 under the MIT license. See the lockfile for transitive packages. The repository vendors no upstream artwork. [Electron license](https://github.com/electron/electron/blob/v45.5.0/LICENSE)
+Reviewed on 2026-11-25. The desktop prototype depends on Electron 45.5.0 under the MIT license. See the lockfile for transitive packages. [Electron license](https://github.com/electron/electron/blob/v45.5.0/LICENSE)
+
+The desktop vendors 22 unmodified interface SVGs from `lucide-static` 0.468.0 under ISC. The package includes icons derived from Feather under MIT. Both license texts ship beside the SVGs in the portable desktop. These files are interface controls and are independent of the pet artwork. [Lucide package](https://www.npmjs.com/package/lucide-static/v/0.468.0) · [Lucide license](apps/desktop/icons/LICENSE) · [Feather license](apps/desktop/icons/LICENSE.feather)
 
 | Project and upstream license | Approach documented by maintainers | Pawmetry takeaway |
 | --- | --- | --- |

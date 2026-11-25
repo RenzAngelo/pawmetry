@@ -16,9 +16,12 @@ import { animationStyle, motionFor } from "../../packages/animation/animation.ts
 import { dimensions, fitBounds, loadPreferences, modes, savePreferences, shortcuts, sizes } from "./preferences.ts";
 import { alertKinds, quotaAlerts } from "./quota-alerts.ts";
 import { prepareReceiver } from "../../tools/codex-activity-probe/receiver.ts";
+import { discoverCodex } from "../../tools/codex-quota-probe/discovery.ts";
 import { isLocalSender, localWindow } from "./local-window.mjs";
 import { createSettingsWindow, settingsUrl } from "./settings-window.mjs";
 import { validSetting } from "./settings-model.ts";
+import { enrollmentTargets } from "./activity-setup.ts";
+import { createCompanionMenu, menuUrl } from "./menu-window.mjs";
 
 const liveSmoke = process.argv.includes("--smoke-live");
 const performanceSmoke = process.argv.includes("--smoke-performance");
@@ -66,12 +69,16 @@ let hovered = false;
 let hitTimer;
 let wakeAt = 0;
 let controlMenu;
+let codexInstall = { status: "unchecked" };
+let codexDetection;
+let selectedProject = null;
 const petScales = { small: 0.8, standard: 1, large: 1.2 };
 const live = createLiveQuota();
 const preferencePath = join(userData, "companion.json");
 const preferences = loadPreferences(preferencePath);
 const takeAlerts = quotaAlerts();
 const petUrl = new URL("./index.html", import.meta.url).href;
+const companionMenu = createCompanionMenu(() => paint());
 const settings = createSettingsWindow({ saved: () => preferences.settingsBounds,
   move: (bounds) => { preferences.settingsBounds = bounds; persist(); }, closing: () => closing,
   fallback: () => (window?.isVisible() ? screen.getDisplayMatching(window.getBounds())
@@ -149,8 +156,19 @@ function activityStatus(status) {
 function settingsState() {
   const { status } = companionView();
   return { preferences, quota: status.quota, liveSelected, monitoringPaused, activity: activityStatus(status),
+    codexInstall, targets: enrollmentTargets(app.getPath("home"), process.env.CODEX_HOME, selectedProject),
     displays: screen.getAllDisplays().map(({ id, label }, i) => ({ id, label: label || `Display ${i + 1}` })),
     canSetStartup: app.isPackaged && process.platform === "win32" };
+}
+
+async function detectCodexInstall() {
+  if (codexDetection) return codexDetection;
+  codexInstall = { status: "checking" };
+  paint();
+  codexDetection = discoverCodex().then((install) => {
+    codexInstall = install.status === "found" ? { status: "found", version: install.version } : { status: install.status };
+  }).catch(() => { codexInstall = { status: "missing" }; }).finally(() => { codexDetection = undefined; paint(); });
+  return codexDetection;
 }
 
 function paint() {
@@ -169,7 +187,9 @@ function paint() {
       height: motion.height * petScales[preferences.petSize], durationMs: Math.round(motion.durationMs / preferences.speed) },
     mode: status.mode, quota: status.quota, activity: activityStatus(status).state, observing: !!activityReceiver,
     presentation: { mode: preferences.mode, background: preferences.backgroundOpacity, opacity: preferences.petOpacity,
-      energy: preferences.energyBar, stamina: preferences.staminaBar, hover: preferences.hoverInfo, hovered,
+      energy: preferences.energyBar, stamina: preferences.staminaBar, hover: preferences.hoverInfo, hovered, theme: preferences.theme,
+      reducedMotion: preferences.reducedMotion,
+      menuOpen: companionMenu.window?.isVisible() ?? false,
       roaming: preferences.roaming && !motion.frozen && shown.speed > 0 && ["walking", "running", "slow-walking"].includes(motion.motion),
       monitoringPaused, paused, alwaysOnTop: preferences.alwaysOnTop },
     notice: notice && notice.expires > now && (notice.test || status.quota === "fresh") ? notice.message : "",
@@ -254,17 +274,40 @@ async function until(check, description) {
 async function smokeControls(menu) {
   const press = (target, selector) => target.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const pet = (op) => press(window, `[data-command="${op}"]`);
-  await pet("toggle-animation");
+  async function openOptions() {
+    await pet("more");
+    await until(() => companionMenu.window?.isVisible(), "custom options are visible");
+    return companionMenu.window;
+  }
+  async function choose(op) {
+    await press(await openOptions(), `[data-command="${op}"]`);
+    await until(() => !companionMenu.window.isVisible(), "option closes the popup");
+  }
+  const options = await openOptions();
+  const key = (name) => options.webContents.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(name)} }))`);
+  await until(() => options.webContents.executeJavaScript("document.activeElement.dataset.command === 'mode-pet'"), "options focus its first item");
+  assert.equal((await options.webContents.capturePage()).isEmpty(), false, "options rendered a frame");
+  await key("ArrowDown");
+  assert.equal(await options.webContents.executeJavaScript("document.activeElement.dataset.command"), "mode-compact");
+  await key("End");
+  assert.equal(await options.webContents.executeJavaScript("document.activeElement.dataset.command"), "quit");
+  await key("Escape");
+  await until(() => !options.isVisible(), "Escape closed the options and returned focus");
+  await choose("toggle-animation");
   await until(() => paused && menu.getMenuItemById("animation-pause").checked, "window and tray agree on animation pause");
-  await pet("toggle-animation");
+  await choose("toggle-animation");
   await until(() => !paused, "animation resumed");
   await pet("toggle-top");
   await until(() => !preferences.alwaysOnTop && !window.isAlwaysOnTop(), "always-on-top disabled");
   await pet("toggle-top");
   await until(() => preferences.alwaysOnTop && window.isAlwaysOnTop(), "always-on-top restored");
-  await pet("display-next");
-  await until(() => preferences.mode === "pet", "toolbar changed display mode and native bounds");
+  await choose("mode-pet");
+  await until(() => preferences.mode === "pet", "options changed display mode and native bounds");
   assert.deepEqual(window.getSize(), [...dimensions.pet[preferences.windowSizes.pet]]);
+  const smallPopup = await openOptions();
+  assert.deepEqual(fitBounds(smallPopup.getBounds(), screen.getDisplayMatching(smallPopup.getBounds()).workArea), smallPopup.getBounds());
+  await press(smallPopup, '[data-command="mode-dashboard"]');
+  await until(() => preferences.mode === "dashboard" && !smallPopup.isVisible(), "pet-only options restored dashboard");
   selectMode("dashboard");
   await pet("hide");
   await until(() => !window.isVisible(), "button hid the companion");
@@ -280,12 +323,28 @@ async function smokeControls(menu) {
   assert.equal(preferences.clickThrough, true, "Settings did not change click-through");
   await until(() => first.webContents.executeJavaScript("document.querySelector('#activity-state').textContent === 'Activity monitoring not configured'"), "Settings connected to its local preload");
   assert.equal((await first.webContents.capturePage()).isEmpty(), false, "native Settings rendered a nonempty frame");
+  first.setBounds({ ...placed, width: 370 });
+  await until(() => first.webContents.executeJavaScript(`matchMedia('(max-width: 480px)').matches &&
+    document.querySelector('nav').getBoundingClientRect().right <= innerWidth`), "narrow Settings navigation stays in the viewport");
+  first.setBounds(placed);
   first.minimize();
   menu.getMenuItemById("settings").click();
   await until(() => first.isVisible() && !first.isMinimized(), "Settings restored from minimize");
   assert.equal(settings.window.id, settingsId);
-  assert.equal(BrowserWindow.getAllWindows().length, 2);
+  assert.equal(BrowserWindow.getAllWindows().filter((w) => w.getTitle() === "Pawmetry Settings").length, 1);
+  await press(first, 'nav [data-section="connections"]');
+  await press(first, '#open-wizard');
+  await press(first, '[data-go="scope"]');
+  await press(first, '[data-go="review"]');
+  assert.match(await first.webContents.executeJavaScript("document.querySelector('#preview-path').textContent"), /hooks\.json$/i);
+  assert.equal(activityReceiver, undefined, "wizard previews without starting enrollment");
+  await press(first, 'nav [data-section="appearance"]');
   await first.webContents.executeJavaScript("history.replaceState(null, '', '#appearance')");
+  await first.webContents.executeJavaScript(`{ const theme = document.querySelector('#setting-theme'); theme.value = '1';
+    theme.dispatchEvent(new Event('change')); }`);
+  await until(() => loadPreferences(preferencePath).theme === "light", "theme preference was saved");
+  assert.equal(await first.webContents.executeJavaScript("document.documentElement.dataset.theme"), "light");
+  await press(first, 'nav [data-section="behavior"]');
   await press(first, "#setting-reducedMotion");
   await until(() => loadPreferences(preferencePath).reducedMotion, "Settings changes persist to disk");
   assert.equal(await first.webContents.executeJavaScript("pawmetrySettings.update('settingsBounds', [])"), "Invalid setting.");
@@ -306,9 +365,10 @@ async function smokeControls(menu) {
 
 async function smokeActivity() {
   const panel = await openSettings();
+  await panel.webContents.executeJavaScript(`document.querySelector('nav [data-section="advanced"]').click()`);
   await panel.webContents.executeJavaScript("document.querySelector('#start-activity').click()");
   await until(async () => activityReceiver && !activityTask && await panel.webContents.executeJavaScript(
-    "document.querySelector('#activity-state').textContent === 'Native hook approval required'"), "Settings created two disposable workspaces and is awaiting events");
+    "document.querySelector('#diagnostic-state').textContent === 'Native hook approval required'"), "Settings created two disposable workspaces and is awaiting events");
   const receiver = activityReceiver;
   assert.deepEqual(await receiver.checkConfigurations(), { A: "present", B: "present" });
   async function deliver(folder, name) {
@@ -327,7 +387,7 @@ async function smokeActivity() {
     assert.deepEqual(receiver.states().map((item) => item.workspace).sort(), ["A", "B"]);
     assert.equal(companionView().status.activity, "working");
     await until(() => panel.webContents.executeJavaScript(
-      "document.querySelector('#activity-state').textContent === 'Activity monitoring connected' && document.querySelectorAll('.workspace').length === 2"),
+      "document.querySelector('#diagnostic-state').textContent === 'Activity monitoring connected' && document.querySelectorAll('.workspace').length === 2"),
     "work in both disposable folders reached Settings while the pet was hidden");
     window.showInactive();
     assert.match(await window.webContents.executeJavaScript("document.querySelector('#activity').textContent"), /working/);
@@ -394,7 +454,7 @@ function setVisible(visible) {
   if (!window || window.isDestroyed()) return;
   preferences.hidden = !visible;
   if (visible) window.showInactive();
-  else window.hide();
+  else { companionMenu.close(); window.hide(); }
   updateHitTesting();
   persist();
 }
@@ -412,7 +472,7 @@ function hitTest() {
     const x = Math.abs(cursor.x - (bounds.x + bounds.width / 2));
     const y = Math.abs(cursor.y - (bounds.y + bounds.height / 2));
     const petY = Math.abs(cursor.y - (bounds.y + (bounds.height - 25) / 2));
-    const inToolbar = hovered && x <= 42 && cursor.y >= bounds.y + bounds.height - 30 && cursor.y < bounds.y + bounds.height;
+    const inToolbar = hovered && x <= 56 && cursor.y >= bounds.y + bounds.height - 34 && cursor.y < bounds.y + bounds.height;
     inside = preferences.mode === "pet" ? (x <= 40 * scale + (preferences.roaming ? 28 : 6) && petY <= 32 * scale + 12) || inToolbar
       : x <= bounds.width / 2 && y <= bounds.height / 2;
     if (preferences.mode === "pet") ignore ||= !inside;
@@ -487,7 +547,12 @@ function setLiveQuota(enabled) {
 }
 
 async function openSettings() {
-  try { const opened = await settings.open(); paint(); return opened; }
+  try {
+    const opened = await settings.open();
+    if (opened && codexInstall.status === "unchecked") void detectCodexInstall();
+    paint();
+    return opened;
+  }
   catch (error) {
     if (smoke) { console.error(error); return; }
     dialog.showErrorBox("Pawmetry Settings", "The Settings window could not open. Restart Pawmetry and try again.");
@@ -522,21 +587,38 @@ function command(op) {
     case "quit": setTimeout(() => app.quit(), 150); break;
     case "toggle-top": changeSetting("alwaysOnTop", !preferences.alwaysOnTop); break;
     case "toggle-animation": pauseAnimation(!paused); break;
-    case "display-next": changeSetting("mode", modes[(modes.indexOf(preferences.mode) + 1) % modes.length]); break;
-    case "more": if (window?.isVisible()) controlMenu?.popup({ window }); break;
+    case "toggle-monitoring": pauseMonitoring(!monitoringPaused); break;
+    case "toggle-click": setClickThrough(!preferences.clickThrough); break;
+    case "mode-pet": case "mode-compact": case "mode-dashboard": changeSetting("mode", op.slice(5)); break;
+    case "more": if (window?.isVisible()) void companionMenu.open(window, () => ({ theme: preferences.theme,
+      mode: preferences.mode, paused, monitoringPaused, clickThrough: preferences.clickThrough, reducedMotion: preferences.reducedMotion,
+      refreshEnabled: liveSelected && !monitoringPaused })).catch(() => {}); break;
   }
 }
 
 function connectRendererIpc() {
   const fromSettings = (event) => isLocalSender(event, settings.window, settingsUrl);
   ipcMain.handle("pawmetry:control", (event, op) => {
-    if (isLocalSender(event, window, petUrl) && ["settings", "hide", "toggle-top", "toggle-animation", "display-next", "refresh", "more"].includes(op)) command(op);
+    if (isLocalSender(event, window, petUrl) && ["settings", "hide", "toggle-top", "more"].includes(op)) command(op);
+  });
+  ipcMain.handle("pawmetry:menu-command", (event, op) => {
+    if (!isLocalSender(event, companionMenu.window, menuUrl) || !companionMenu.window.isVisible()
+      || !["close", "mode-pet", "mode-compact", "mode-dashboard", "toggle-animation", "toggle-monitoring", "toggle-click", "refresh", "settings", "quit"].includes(op)) return;
+    companionMenu.close();
+    if (op === "close" && window.isVisible()) { window.focus(); window.webContents.send("pawmetry:focus-options"); }
+    else command(op);
   });
   ipcMain.handle("pawmetry:settings-read", (event) => fromSettings(event) ? settingsState() : null);
   ipcMain.handle("pawmetry:settings-update", (event, key, value) => fromSettings(event) ? changeSetting(key, value) : "Settings command denied.");
   ipcMain.handle("pawmetry:settings-action", async (event, action) => {
     if (!fromSettings(event)) return null;
     switch (action) {
+      case "detect-codex": await detectCodexInstall(); break;
+      case "select-project": {
+        const result = await dialog.showOpenDialog(settings.window, { properties: ["openDirectory"], title: "Choose a project to preview" });
+        if (!result.canceled) selectedProject = result.filePaths[0] ?? null;
+        break;
+      }
       case "start-activity": case "stop-activity": await setActivity(action === "start-activity"); break;
       case "check-hooks": {
         const receiver = activityReceiver;
@@ -548,6 +630,7 @@ function connectRendererIpc() {
       case "copy-A": case "copy-B": if (activityReceiver) clipboard.writeText(activityReceiver.paths[action === "copy-A" ? "A" : "B"]); break;
       case "live-quota": case "simulate-quota": setLiveQuota(action === "live-quota"); break;
       case "pause-monitoring": case "resume-monitoring": case "refresh": command(action); break;
+      case "next-scenario": advance(); break;
       case "test-notice": notify("Pawmetry test notification", Object.values(preferences.alerts).includes("sound"), true); break;
       case "start-at-login": case "remove-at-login": if (app.isPackaged && process.platform === "win32") await chooseStartup(action === "start-at-login"); break;
       default: return null;
@@ -601,6 +684,7 @@ async function start() {
     assert.deepEqual(window.getBounds(), preferences.bounds, "saved bounds after restarting Electron");
     assert.deepEqual(window.getSize(), [...dimensions.dashboard.small]);
     assert.equal(preferences.petSize, "large");
+    assert.equal(preferences.theme, "light");
     console.log("Desktop restarted with saved window bounds and independent pet size.");
     app.exit(0);
     return;
@@ -621,11 +705,20 @@ async function start() {
         assert.deepEqual(window.getSize(), [width, height], "native size after preset change");
         const resized = await window.webContents.executeJavaScript(`new Promise((resolve) => {
           const matches = () => innerWidth === ${width} && innerHeight === ${height} && document.body.dataset.layout === '${mode}';
-          const until = performance.now() + 900;
+          const until = performance.now() + 1600;
           const check = () => matches() || performance.now() >= until ? resolve(matches()) : requestAnimationFrame(check);
           check();
         })`);
-        assert.equal(resized, true, "renderer size after preset change");
+        if (!resized) {
+          const observed = await window.webContents.executeJavaScript("[innerWidth, innerHeight, document.body.dataset.layout]");
+          assert.deepEqual(observed, [width, height, mode], "renderer size and layout after preset change");
+        }
+        assert.equal(await window.webContents.executeJavaScript(`
+          [...document.querySelectorAll('.commands button')].every(button => {
+            const box = button.getBoundingClientRect();
+            return box.width > 0 && box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight
+              && button.title && getComputedStyle(button.querySelector('.icon')).maskImage !== 'none';
+          })`), true, "all four labeled controls fit the visible viewport");
       }
     }
     preferences.bounds = window.getBounds();
@@ -661,7 +754,7 @@ async function start() {
   tray.on("double-click", recover);
   window.on("move", persist);
   window.on("resize", persist);
-  for (const event of ["display-removed", "display-metrics-changed"]) screen.on(event, () => { keepOnDisplay(); settings.recover(); paint(); });
+  for (const event of ["display-removed", "display-metrics-changed"]) screen.on(event, () => { companionMenu.close(); keepOnDisplay(); settings.recover(); paint(); });
   powerMonitor.on("resume", () => { wakeAt = Date.now() + 2000; });
   if (preferences.shortcut && !chooseShortcut(preferences.shortcut)) preferences.shortcut = null;
   if (!performanceSmoke && !preferences.hidden) window.showInactive();
