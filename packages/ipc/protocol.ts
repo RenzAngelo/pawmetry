@@ -9,13 +9,17 @@ export const hex = /^[0-9a-f]{64}$/;
 export const nonce = () => randomBytes(32).toString("hex");
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
-export type Operation = "status" | "refresh" | "show" | "hide";
+export const operations = ["status", "refresh", "show", "hide", "settings", "pause-monitoring", "resume-monitoring",
+  "pause-animation", "resume-animation", "quit"] as const;
+export type Operation = (typeof operations)[number];
+export const validOperation = (value: unknown): value is Operation => operations.some((op) => op === value);
 export type Endpoint = { v: 1; port: number; key: string };
 export type Meter = { remaining: number | null; resetAt: number | null };
+export type CompanionActivity = "working" | "interrupted" | "stale" | "disconnected" | "unknown";
 export type Status = {
   mode: "simulation" | "live";
-  quota: "offline" | "loading" | "fresh" | "stale" | "unavailable";
-  activity: "unknown";
+  quota: "offline" | "loading" | "fresh" | "stale" | "unavailable" | "paused";
+  activity: CompanionActivity;
   validUntil: number | null;
   energy: Meter;
   stamina: Meter;
@@ -45,8 +49,9 @@ export function validStatus(value: unknown): value is Status {
   const item = fields(value, ["mode", "quota", "activity", "validUntil", "energy", "stamina"]);
   return !!item && (item.mode === "simulation" || item.mode === "live")
     && (item.quota === "offline" || item.quota === "loading" || item.quota === "fresh"
-      || item.quota === "stale" || item.quota === "unavailable")
-    && item.activity === "unknown" && (item.validUntil === null || isInstant(item.validUntil))
+      || item.quota === "stale" || item.quota === "unavailable" || item.quota === "paused")
+    && (item.activity === "unknown" || item.activity === "working" || item.activity === "interrupted"
+      || item.activity === "stale" || item.activity === "disconnected") && (item.validUntil === null || isInstant(item.validUntil))
     && validMeter(item.energy) && validMeter(item.stamina)
     && validAvailability(item as unknown as Status);
 }

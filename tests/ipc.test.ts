@@ -105,14 +105,16 @@ test("simulation and stale frames cannot smuggle live meter data", () => {
   assert.equal(validStatus(status), true);
 });
 
-test("the authenticated protocol permits only the two bounded window controls", async (t) => {
+test("the authenticated protocol permits fixed companion controls", async (t) => {
   const commands: string[] = [];
   const server = await listenStatus((command) => { commands.push(command); return status; });
   t.after(server.close);
   await askStatus(server.endpoint, "hide");
   await askStatus(server.endpoint, "show");
+  await askStatus(server.endpoint, "settings");
+  await askStatus(server.endpoint, "pause-monitoring");
   await assert.rejects(askStatus({ ...server.endpoint, key: nonce() }, "hide"));
-  assert.deepEqual(commands, ["hide", "show"]);
+  assert.deepEqual(commands, ["hide", "show", "settings", "pause-monitoring"]);
 });
 
 test("native Windows discovery publishes, verifies, replaces and clears a logon-scoped descriptor",

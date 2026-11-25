@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('read', 'publish', 'clear')][string]$Action,
+    [Parameter(Mandatory)][ValidateSet('read', 'publish', 'clear', 'activity')][string]$Action,
     [ValidatePattern('^([0-9a-f]{32})?$')][string]$TestNamespace = ''
 )
 
@@ -16,6 +16,10 @@ for ($parent = [IO.DirectoryInfo]::new($base); $null -ne $parent; $parent = $par
 }
 $name = 'Pawmetry-ipc-v1-' + $sid.Value
 if ($TestNamespace) { $name += '-test-' + $TestNamespace }
+if ($Action -eq 'activity') {
+    if (!$TestNamespace) { exit 1 }
+    $name = 'Pawmetry-activity-' + $TestNamespace
+}
 $directory = Join-Path $base $name
 $path = Join-Path $directory 'endpoint.json'
 
@@ -34,7 +38,7 @@ function Assert-Private([string]$Target, [bool]$IsDirectory) {
 
 $guard = $null
 try {
-    if ($Action -eq 'publish' -and ![IO.Directory]::Exists($directory)) {
+    if (($Action -eq 'publish' -or $Action -eq 'activity') -and ![IO.Directory]::Exists($directory)) {
         $security = [Security.AccessControl.DirectorySecurity]::new()
         $security.SetAccessRuleProtection($true, $false)
         $security.SetOwner($identity.User)
@@ -44,6 +48,10 @@ try {
     }
     if (![IO.Directory]::Exists($directory)) { exit 0 }
     Assert-Private $directory $true
+    if ($Action -eq 'activity') {
+        [Console]::Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($directory)))
+        exit 0
+    }
     if ($Action -ne 'read') {
         $guardPath = Join-Path $directory 'mutation.lock'
         if ((Test-Path -LiteralPath $guardPath) -and ((Get-Item -LiteralPath $guardPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { exit 1 }

@@ -88,6 +88,11 @@ test("Codex adapter marks provider data age and unverified sleep behavior unknow
   assert.deepEqual(normalized.windows.map((w) => [w.slot, w.remainingPercent]), [["energy", 0], ["stamina", 85]]);
   assert.equal(normalized.providerObservedAtMs, null);
   assert.equal(petState(normalized, "unknown", 10_001).pose, "exhausted");
+  const blocking = { ...normalized, windows: normalized.windows.map((window) => ({ ...window, blocking: true })) };
+  assert.equal(petState(blocking, "unknown", 10_001).pose, "sleeping");
+  const working = petState(blocking, "tool-started", 10_001);
+  assert.equal(working.pose, "working");
+  assert.equal(working.energy, 0);
 });
 
 test("recharge requires a newer matching observation with reset advancement and recovery", () => {
@@ -96,6 +101,9 @@ test("recharge requires a newer matching observation with reset advancement and 
   assert.equal(petState(sample(15_001, 100, 30_000), "unknown", 15_001, previous).pose, "recharging");
   assert.equal(petState(sample(15_001, 5, 30_000), "unknown", 15_001, previous).pose, "exhausted");
   assert.equal(petState(sample(14_999, 100, 30_000), "unknown", 15_001, previous).pose, "energetic");
+  const unknown = sample(15_001, 100, 30_000);
+  unknown.scope = { ...unknown.scope, accountKey: null };
+  assert.equal(petState(unknown, "unknown", 15_001, previous).pose, "energetic");
 });
 
 test("offline simulation labels every scenario and exercises every pose", () => {

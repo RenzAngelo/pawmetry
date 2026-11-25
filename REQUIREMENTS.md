@@ -47,3 +47,10 @@
 | P6 | MVP | Target Windows 11 x64 and local VS Code desktop first, with verified Codex capabilities only. Evaluate WSL, remote hosts, Claude Code and Copilot separately |
 
 See [the test plan](TEST_PLAN.md) for acceptance and [the security design](SECURITY.md) for controls.
+
+## Desktop prototype follow-up
+
+- Visible presentations are pet-only, compact and dashboard. Hidden mode keeps explicitly enabled background monitoring active. Window size is independent of pet size. Preserve settings, mapped monitor placement and a tray recovery route for click-through.
+- Expose separate animation and monitoring controls. Editor controls only issue fixed authenticated messages to the companion. A confirmed per-user startup setting is optional and defaults to off.
+- Notify on fresh real quota observations only. Confirm restoration using a newer reading from the same known quota scope, an advanced reset timestamp, and increased remaining allowance. Require authoritative activity evidence before enabling task or approval alerts.
+- Keep artwork, animation, activity, movement and quota channels independent. Use temporary assets until the maintainer approves the original mascot. [Animation asset specification](ANIMATION_ASSET_SPEC.md)

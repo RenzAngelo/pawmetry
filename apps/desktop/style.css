@@ -1,21 +1,28 @@
 :root { color-scheme: dark; font-family: "Segoe UI", sans-serif; color: #f4f9f7; }
 * { box-sizing: border-box; }
-body { margin: 0; padding: 10px; }
-.card { height: calc(100vh - 20px); padding: 18px; background: #151f24; border: 1px solid #40505a; border-radius: 20px; -webkit-app-region: drag; }
+body { margin: 0; padding: 10px; overflow: hidden; }
+.card { height: calc(100vh - 20px); padding: 14px; background: rgb(21 31 36 / var(--card-alpha, 1));
+  border: 1px solid rgb(64 80 90 / var(--card-alpha, 1)); border-radius: 20px; -webkit-app-region: drag; }
 .card { position: relative; }
 header, .metric { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 header span { color: #a9e6ca; font-size: 12px; }
 .stage { display: grid; height: clamp(80px, calc(100vh - 206px), 170px); place-items: center; }
+.pet-position { opacity: var(--pet-alpha, 1); }
 .placeholder { display: flex; justify-content: center; align-items: center; gap: 18px; width: var(--sprite-width, 78px); height: var(--sprite-height, 64px);
   background: #87d5b1; border: 4px solid #abdcc8; border-radius: 16px; transform: translateY(2px); }
 .placeholder i { width: 7px; height: 13px; background: #263d37; border-radius: 6px; }
 body[data-moving="true"] .placeholder { animation: var(--gesture, breathe) var(--pace, 800ms) steps(var(--frames, 4)) var(--loops, infinite) alternate; }
+body[data-moving="true"][data-motion="celebration"] .placeholder {
+  animation: cheer var(--pace) steps(var(--frames)) 1, breathe 1300ms var(--pace) infinite alternate;
+}
 body[data-motion="walking"], body[data-motion="running"], body[data-motion="slow-walking"] { --gesture: bounce; }
 body[data-motion="working"], body[data-motion="waiting"] { --gesture: lean; }
 body[data-motion="celebration"] { --gesture: cheer; }
+body[data-low-energy="true"] .placeholder i { height: 8px; }
 body[data-pose="sleeping"] .placeholder i { height: 3px; }
 body[data-pose="unknown"] .placeholder, body[data-pose="disconnected"] .placeholder { background: #829196; border-color: #acb5b8; }
-#pose { margin: 0 0 14px; text-align: center; font-weight: 600; }
+#pose { margin: 0; text-align: center; font-weight: 600; }
+#activity { text-align: center; }
 #quota-notice { position: absolute; top: 36px; left: 17px; right: 17px; margin: 0; padding: 6px 8px; border-radius: 6px;
   color: #fff0cd; background: #53391c; text-align: center; font-size: 12px; }
 #quota-notice:empty { display: none; }
@@ -24,8 +31,22 @@ body[data-pose="unknown"] .placeholder, body[data-pose="disconnected"] .placehol
 .metric meter { flex: 1; accent-color: #87d5b1; }
 .metric output { min-width: 36px; text-align: right; }
 small { color: #bdcbd1; font-size: 10px; display: block; min-height: 13px; margin: 3px 0 0; }
+body[data-layout="compact"] .stage { height: max(80px, calc(100vh - 164px)); }
+body[data-layout="compact"] .details small { display: none; }
+body[data-layout="pet"] { padding: 0; }
+body[data-layout="pet"] .card { height: 100vh; padding: 0; border: none; background: transparent; -webkit-app-region: no-drag; }
+body[data-layout="pet"] .stage { height: 100%; }
+body[data-layout="pet"] .pet-position { -webkit-app-region: drag; }
+body[data-layout="pet"] .card > :not(.stage, header) { display: none; }
+body[data-layout="pet"] header { position: absolute; inset: auto 0 5px; display: flex; justify-content: center; opacity: 0; pointer-events: none; }
+body[data-layout="pet"][data-hovered="true"] header { opacity: 1; }
+body[data-layout="pet"] header strong { display: none; }
+body[data-hover-info="true"][data-hovered="false"] .card :is(header, #pose, #activity, .details) { opacity: 0; }
+body[data-roaming="true"] .stage { --stride: min(22px, 10vw); }
+body[data-roaming="true"] .pet-position { animation: roam var(--roam-pace, 3000ms) ease-in-out infinite alternate; }
+@keyframes roam { from { transform: translateX(calc(-1 * var(--stride))); } to { transform: translateX(var(--stride)); } }
 @keyframes bounce { to { transform: translateY(-9px); } }
 @keyframes breathe { to { transform: scaleY(.92); } }
 @keyframes lean { to { transform: rotate(-7deg); } }
 @keyframes cheer { 50% { transform: translateY(-18px) rotate(7deg); } }
-@media (prefers-reduced-motion: reduce) { .placeholder { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .placeholder, .pet-position { animation: none !important; } }

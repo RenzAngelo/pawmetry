@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { test } from "node:test";
 import { discoverCodex } from "../tools/codex-quota-probe/discovery.ts";
+import { hookConfig } from "../tools/codex-activity-probe/receiver.ts";
 
 test("native Codex lists project hooks and notices cleanup without trusting or executing a hook",
   { skip: process.platform !== "win32" || process.env.PAWMETRY_NATIVE_HOOKS_TEST !== "1", timeout: 20_000 },
@@ -60,13 +61,12 @@ test("native Codex lists project hooks and notices cleanup without trusting or e
         send({ method: "initialized" });
         assert.equal((await list()).length, 0);
         const file = join(folder, "hooks.json");
-        await writeFile(file, JSON.stringify({
-          hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "echo discovery-only", timeout: 1 }] }] },
-        }), { flag: "wx" });
+        const config = hookConfig(process.execPath, 12345, "a".repeat(64), "A", false);
+        await writeFile(file, config, { flag: "wx" });
         const hooks = await list();
-        assert.equal(hooks.length, 1);
-        assert.equal(hooks[0].eventName, "preToolUse");
-        assert.equal(hooks[0].trustStatus, "untrusted");
+        const names = Object.keys(JSON.parse(config).hooks).map((name) => name[0].toLowerCase() + name.slice(1));
+        assert.deepEqual(hooks.map((hook: { eventName: string }) => hook.eventName).sort(), names.sort());
+        assert.ok(hooks.every((hook: { trustStatus: string }) => hook.trustStatus === "untrusted"));
         await unlink(file);
         assert.equal((await list()).length, 0);
       } finally {

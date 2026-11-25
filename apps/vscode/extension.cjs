@@ -19,6 +19,22 @@ function activate(context) {
   let demoIndex = 0;
   let ask;
   let resetText;
+  const changed = new vscode.EventEmitter();
+  let rows = [];
+  const controls = [
+    ["Connect to companion", "connectDesktop"], ["Show companion", "showDesktop"], ["Hide companion", "hideDesktop"],
+    ["Refresh quota", "refreshQuota"], ["Settings", "desktopSettings"], ["Pause animations", "pauseAnimations"],
+    ["Resume animations", "resumeAnimations"], ["Pause monitoring", "pauseMonitoring"],
+    ["Resume monitoring", "resumeMonitoring"], ["Exit companion", "exitCompanion"],
+  ];
+  const provider = { onDidChangeTreeData: changed.event, getTreeItem: (item) => item, getChildren(parent) {
+    if (parent) return [];
+    return [...rows.map((label) => new vscode.TreeItem(label)), ...controls.map(([label, command]) => {
+      const item = new vscode.TreeItem(label);
+      item.command = { command: `pawmetry.${command}`, title: label };
+      return item;
+    })];
+  } };
   quota.name = "Pawmetry quota";
   quota.command = "pawmetry.refreshQuota";
   activity.name = "Pawmetry activity";
@@ -39,13 +55,20 @@ function activate(context) {
     quota.text = `${demo ? "Pawmetry Sim" : "Pawmetry"} · ${percent(values[0])} / ${percent(values[1])}`;
     quota.tooltip = demo ? "Simulated energy and stamina" :
       ["Codex energy and stamina from the desktop companion.", ...resetInfo].join("\n");
-    activity.text = demo ? `Sim activity · ${demo.pet.pose}` : "Activity · Unknown";
-    activity.tooltip = demo ? "Offline demonstration" : "Live activity requires a verified local activity source.";
+    activity.text = demo ? `Sim activity · ${demo.pet.pose}` : desktop?.activity && desktop.activity !== "unknown"
+      ? `Observed activity · ${desktop.activity}` : "Activity · Unknown";
+    activity.tooltip = demo ? "Offline demonstration"
+      : "All enrolled disposable sessions observed by the companion. This window’s activity is unknown.";
     const health = desktop?.quota === "fresh" && !valid ? "stale" : desktop?.quota;
     connection.text = desktop ? "Pawmetry desktop · " + (desktop.mode === "simulation" ? "Simulation" : valid ? "Live" : "Quota " + health)
       : "Pawmetry desktop · Disconnected";
     connection.tooltip = desktop ? "Connected to the local desktop companion"
       : "Start the companion and enable live quota from its tray menu.";
+    const next = [connection.text, quota.text, activity.text, ...resetInfo];
+    if (next.length !== rows.length || next.some((line, i) => line !== rows[i])) {
+      rows = next;
+      changed.fire();
+    }
   }
 
   async function exchange(op) {
@@ -78,13 +101,22 @@ function activate(context) {
     }
   }
 
-  context.subscriptions.push(quota, activity, connection,
+  context.subscriptions.push(quota, activity, connection, changed, vscode.window.registerTreeDataProvider("pawmetry.controls", provider),
     vscode.commands.registerCommand("pawmetry.connectDesktop", async () => {
       await exchange("status");
-      if (!desktop) vscode.window.showInformationMessage("Start the Pawmetry companion to connect.");
+      if (!desktop) vscode.window.showInformationMessage("Start Pawmetry.exe or run npm.cmd run desktop in the Pawmetry repository, then reconnect.");
     }),
     vscode.commands.registerCommand("pawmetry.showDesktop", () => exchange("show")),
     vscode.commands.registerCommand("pawmetry.hideDesktop", () => exchange("hide")),
+    vscode.commands.registerCommand("pawmetry.desktopSettings", () => exchange("settings")),
+    vscode.commands.registerCommand("pawmetry.pauseAnimations", () => exchange("pause-animation")),
+    vscode.commands.registerCommand("pawmetry.resumeAnimations", () => exchange("resume-animation")),
+    vscode.commands.registerCommand("pawmetry.pauseMonitoring", () => exchange("pause-monitoring")),
+    vscode.commands.registerCommand("pawmetry.resumeMonitoring", () => exchange("resume-monitoring")),
+    vscode.commands.registerCommand("pawmetry.exitCompanion", async () => {
+      const answer = await vscode.window.showWarningMessage("Exit the Pawmetry companion and stop background monitoring?", { modal: true }, "Exit");
+      if (answer === "Exit") await exchange("quit");
+    }),
     vscode.commands.registerCommand("pawmetry.refreshQuota", async () => {
       demo = null;
       render();

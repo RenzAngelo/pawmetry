@@ -1,5 +1,5 @@
 import { createConnection, createServer, type Socket } from "node:net";
-import { fields, frames, hex, loopback, matches, nonce, proof, validStatus, version,
+import { fields, frames, hex, loopback, matches, nonce, proof, validOperation, validStatus, version,
   type Endpoint, type Operation, type Status } from "./protocol.ts";
 
 const deadlineMs = 1800;
@@ -29,8 +29,7 @@ export async function listenStatus(handle: (op: Operation) => Status) {
       }
       const request = fields(frame, ["op", "mac"]);
       const op = request?.op;
-      if ((op !== "status" && op !== "refresh" && op !== "show" && op !== "hide")
-        || !matches(request?.mac, proof(key, "client", client, challenge, op))) {
+      if (!validOperation(op) || !matches(request?.mac, proof(key, "client", client, challenge, op))) {
         socket.destroy(); return;
       }
       served = true;

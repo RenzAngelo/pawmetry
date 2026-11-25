@@ -7,13 +7,14 @@
 <link rel="stylesheet" href="./style.css">
 <main class="card">
   <header><strong>Pawmetry</strong><span id="mode">Simulation</span></header>
-  <div class="stage" aria-hidden="true"><div class="placeholder"><i></i><i></i></div></div>
+  <div class="stage" aria-hidden="true"><div class="pet-position"><div class="placeholder"><i></i><i></i></div></div></div>
   <p id="pose" role="status">Starting</p>
+  <small id="activity" aria-live="polite"></small>
   <p id="quota-notice" aria-live="polite"></p>
-  <div class="metric"><label for="energy">Energy</label><meter id="energy" max="100" value="0"></meter><output id="energy-text">—</output></div>
-  <small id="energy-reset"></small>
-  <div class="metric"><label for="stamina">Stamina</label><meter id="stamina" max="100" value="0"></meter><output id="stamina-text">—</output></div>
-  <small id="stamina-reset"></small>
+  <div id="energy-group" class="details"><div class="metric"><label for="energy">Energy</label><meter id="energy" max="100" value="0"></meter><output id="energy-text">—</output></div>
+  <small id="energy-reset"></small></div>
+  <div id="stamina-group" class="details"><div class="metric"><label for="stamina">Stamina</label><meter id="stamina" max="100" value="0"></meter><output id="stamina-text">—</output></div>
+  <small id="stamina-reset"></small></div>
 </main>
 <script src="./renderer.js"></script>
 </html>

@@ -19,6 +19,8 @@ exports.run = async function () {
       const live = await vscode.commands.executeCommand("pawmetry.stopSimulation");
       assert.match(live.quota, /58% \/ 73%/);
       assert.equal(live.activity, "Activity · Unknown");
+      assert.equal(await vscode.commands.executeCommand("pawmetry.pauseMonitoring"), true);
+      assert.equal(await vscode.commands.executeCommand("pawmetry.resumeMonitoring"), true);
     } else {
       assert.match(initial.quota, /\? \/ \?/);
     }

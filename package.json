@@ -13,6 +13,7 @@
     "desktop": "node tools/launch-desktop.mjs",
     "desktop:smoke": "node tools/launch-desktop.mjs --smoke-test",
     "desktop:smoke-live": "node tools/launch-desktop.mjs --smoke-live",
+    "desktop:smoke-performance": "node tools/launch-desktop.mjs --smoke-performance",
     "desktop:smoke-lock": "node tools/test-desktop-lock.mjs",
     "vscode:smoke-ipc": "node tools/test-vscode-ipc.ts",
     "build:local": "node tools/build-local.mjs",

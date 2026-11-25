@@ -4,11 +4,11 @@ import { once } from "node:events";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { windowsEndpoint } from "../packages/ipc/discovery.ts";
-import { nonce, type Status } from "../packages/ipc/protocol.ts";
+import { nonce, type Operation, type Status } from "../packages/ipc/protocol.ts";
 import { listenStatus } from "../packages/ipc/transport.ts";
 
 const namespace = nonce().slice(0, 32);
-let refreshes = 0;
+const calls: Operation[] = [];
 const status: Status = { mode: "live", quota: "fresh", activity: "unknown", validUntil: Date.now() + 90_000,
   energy: { remaining: 58, resetAt: null }, stamina: { remaining: 73, resetAt: null } };
 
@@ -25,14 +25,16 @@ async function host() {
   assert.equal(code, 0, "Isolated VS Code IPC test failed");
 }
 
-const server = await listenStatus((op) => { if (op === "refresh") refreshes++; return status; });
+const server = await listenStatus((op) => { calls.push(op); return status; });
 try {
   await windowsEndpoint("publish", server.endpoint, namespace);
   const hosts = await Promise.allSettled([host(), host()]);
   for (const result of hosts) {
     if (result.status === "rejected") throw result.reason;
   }
-  assert.equal(refreshes, 2);
+  for (const op of ["refresh", "pause-monitoring", "resume-monitoring"] as const) {
+    assert.equal(calls.filter((call) => call === op).length, 2);
+  }
   console.log("Two isolated VS Code extension hosts received the same authenticated quota.");
 } finally {
   await server.close();

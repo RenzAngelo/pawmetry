@@ -7,6 +7,7 @@ export const deliveryWindowMs = 10_000;
 export const hookEvents = {
   SessionStart: "session-started", SessionEnd: "session-ended",
   PreToolUse: "tool-started", PostToolUse: "tool-ended",
+  PreModelRequest: "model-started", PostModelRequest: "model-ended",
   Interrupt: "interrupted", Stop: "turn-stopped",
 } as const;
 export type HookName = keyof typeof hookEvents;

@@ -3,11 +3,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { fitBounds, loadPreferences, preferences, savePreferences } from "../apps/desktop/preferences.ts";
+import { defaults, dimensions, fitBounds, loadPreferences, preferences, savePreferences } from "../apps/desktop/preferences.ts";
 import { quotaAlerts } from "../apps/desktop/quota-alerts.ts";
 import { animationStyle, frameAt, motionFor, prototypeProfile } from "../packages/animation/animation.ts";
 import type { Status } from "../packages/ipc/protocol.ts";
 import { scenarios, simulate } from "../packages/simulation/scenarios.ts";
+import { spriteFrame, validateAtlas } from "../packages/animation/sprite-atlas.ts";
 
 test("desktop saves only supported settings and recovers from invalid preferences", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pawmetry-prefs-"));
@@ -19,7 +20,15 @@ test("desktop saves only supported settings and recovers from invalid preference
     alwaysOnTop: false, lowQuotaAlerts: true, reducedMotion: true, live: true, clickThrough: true });
   savePreferences(path, value);
   assert.deepEqual(loadPreferences(path), value);
-  assert.doesNotMatch(await readFile(path, "utf8"), /live|clickThrough/);
+  assert.doesNotMatch(await readFile(path, "utf8"), /live/);
+  assert.equal(loadPreferences(path).clickThrough, true);
+  assert.equal(value.windowSizes.dashboard, "large");
+  assert.equal(value.alerts.lowEnergy, "silent");
+  const [width, height] = dimensions.pet.small;
+  const petOnly = preferences({ ...value, mode: "pet", windowSizes: { ...value.windowSizes, pet: "small" },
+    petSize: "large", backgroundOpacity: 0, bounds: { x: -800, y: 70, width, height } });
+  savePreferences(path, petOnly);
+  assert.deepEqual(loadPreferences(path), petOnly);
   savePreferences(path, { ...value, alwaysOnTop: true });
   assert.equal(loadPreferences(path).alwaysOnTop, true);
 });
@@ -36,13 +45,30 @@ test("low-quota alerts require opt-in fresh live data and rearm only after recov
   const take = quotaAlerts();
   const status: Status = { mode: "live", quota: "fresh", validUntil: 1000, activity: "unknown",
     energy: { remaining: 20, resetAt: null }, stamina: { remaining: null, resetAt: null } };
-  assert.equal(take(status, false).length, 0);
-  assert.equal(take({ ...status, mode: "simulation" }, true).length, 0);
-  assert.equal(take({ ...status, quota: "stale" }, true).length, 0);
-  assert.deepEqual(take(status, true), [{ meter: "energy", remaining: 20 }]);
-  assert.equal(take(status, true).length, 0);
-  take({ ...status, energy: { remaining: 26, resetAt: null } }, true);
-  assert.equal(take(status, true).length, 1);
+  const observation = { at: 25, scope: "test-scope", restored: [] };
+  const settings = preferences({ lowQuotaAlerts: true });
+  assert.equal(take(status, observation, defaults, 100).length, 0);
+  assert.equal(take({ ...status, mode: "simulation" }, observation, settings, 100).length, 0);
+  assert.equal(take({ ...status, quota: "stale" }, observation, settings, 100).length, 0);
+  assert.deepEqual(take(status, observation, settings, 100), [{ message: "Energy at 20%", sound: false }]);
+  assert.equal(take(status, observation, settings, 100).length, 0);
+  take({ ...status, energy: { remaining: 26, resetAt: null } }, observation, settings, 100);
+  assert.equal(take(status, observation, settings, 100).length, 1);
+});
+
+test("restoration and exhaustion are independent, deduplicated and honor local quiet hours", () => {
+  const take = quotaAlerts();
+  const now = new Date(2026, 10, 25, 6).getTime();
+  const observation = { at: now, scope: "test-scope", restored: ["energy"] as ["energy"] };
+  const status: Status = { mode: "live", quota: "fresh", validUntil: now + 10_000, activity: "unknown",
+    energy: { remaining: 81, resetAt: now + 1000 }, stamina: { remaining: 0, resetAt: null } };
+  const settings = preferences({ alerts: { restoredEnergy: "sound", exhaustion: "silent" } });
+  assert.deepEqual(take(status, observation, { ...settings, quietHours: true }, now), []);
+  assert.deepEqual(take(status, observation, settings, now), [], "quiet-hours notices are not replayed");
+  assert.deepEqual(take(status, { ...observation, scope: "different-scope" }, settings, now), [
+    { message: "Energy restored to 81%", sound: true }, { message: "Stamina allowance at 0%", sound: false },
+  ]);
+  assert.deepEqual(take(status, { ...observation, scope: "different-scope", at: now + 1000 }, settings, now + 1000), []);
 });
 
 test("animation covers the prototype states, configurable pacing and reduced motion", () => {
@@ -59,4 +85,22 @@ test("animation covers the prototype states, configurable pacing and reduced mot
   assert.equal(frameAt(alternate.walking, 1000), 0);
   assert.equal(frameAt(prototypeProfile.celebration, 5000), 7);
   assert.equal(frameAt(alternate.walking, 400, 1, true), 0);
+});
+
+test("sprite atlas validates dimensions and clip metadata and keeps the mirrored anchor aligned", () => {
+  const config = { schema: 1, frameWidth: 128, frameHeight: 128, anchorX: 60, anchorY: 110,
+    facing: "mirror", clips: prototypeProfile };
+  const image = { width: 1024, height: 1280 };
+  const atlas = validateAtlas(config, image);
+  assert.ok(atlas);
+  assert.equal(validateAtlas({ ...config, frameWidth: 500 }, image), null);
+  assert.equal(validateAtlas({ ...config, clips: { ...config.clips, idle: { frames: 9, fps: 5, loop: true } } }, image), null);
+  assert.deepEqual(spriteFrame(atlas, "walking", "left", 250),
+    { x: 256, y: 128, width: 128, height: 128, anchorX: 67, anchorY: 110, mirror: true });
+  const dual = validateAtlas({ ...config, facing: "dual" }, { ...image, height: 2560 });
+  assert.ok(dual);
+  const left = spriteFrame(dual, "working", "left", 500, 1, true);
+  assert.equal(left.x, 0);
+  assert.equal(left.y, 16 * 128);
+  assert.equal(left.mirror, false);
 });

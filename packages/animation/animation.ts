@@ -9,7 +9,7 @@ const clip = (frames: number, fps: number, loop = true): Clip => ({ frames, fps,
 export const prototypeProfile: AnimationProfile = {
   idle: clip(4, 4), walking: clip(6, 8), running: clip(8, 14), "slow-walking": clip(4, 5),
   exhaustion: clip(4, 3), sleeping: clip(2, 2), working: clip(6, 10), waiting: clip(4, 5),
-  celebration: clip(8, 12, false), unknown: clip(1, 1),
+  celebration: clip(8, 12, false), unknown: clip(4, 3),
 };
 
 function validClip(clip: Clip | undefined): clip is Clip {
@@ -41,7 +41,8 @@ export function animationStyle(pet: PetState, motion: Motion, reduced: boolean,
   profile: AnimationProfile = prototypeProfile) {
   const candidate = profile[motion];
   const selected = validClip(candidate) ? candidate : prototypeProfile[motion];
-  const paced = motion === "walking" || motion === "running" || motion === "slow-walking" || motion === "exhaustion";
+  const paced = motion === "walking" || motion === "running" || motion === "slow-walking" || motion === "exhaustion"
+    || (motion === "working" && pet.pose === "working");
   const speed = paced ? Math.max(0.15, Math.min(1, pet.speed)) : 1;
   return { ...selected, motion, durationMs: Math.round(1000 * selected.frames / (selected.fps * speed)),
     frozen: reduced || selected.frames === 1 };

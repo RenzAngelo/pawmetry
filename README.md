@@ -30,11 +30,22 @@ Add `--show-workspace` to display the provider's workspace label locally when su
 ## Run the prototypes
 
 - Use `npm.cmd run simulate -- recharging` for an offline scenario in the terminal.
-- Use `npm.cmd run activity:probe -- --prepare-disposable` to prepare two temporary workspaces and a loopback receiver. Follow Codex's normal trust review. Native hook execution remains subject to the [manual checks](MANUAL_TESTS.md).
+- Use the tray’s **Start or stop disposable Codex activity** command to prepare two workspaces for the companion. `npm.cmd run activity:probe -- --prepare-disposable` offers the equivalent standalone terminal probe. Follow the [activity setup](#test-codex-activity-in-disposable-workspaces).
 - Use `npm.cmd ci` and `npm.cmd run desktop` for the Windows companion. It starts in simulation. Enable **Live Codex quota** in the tray to read real quota. The first launch may download the pinned Electron runtime into the repository cache. Run `npm.cmd run desktop:smoke` for an offline renderer check. The separate `npm.cmd run desktop:smoke-live` intentionally makes one real quota request.
 - Run `& .\tools\test-vscode.ps1` for the local extension-host test with an isolated profile. For interactive development, launch VS Code with `--extensionDevelopmentPath` pointing to `apps/vscode`. Editors share the desktop's quota results via authenticated local IPC. The VS Code refresh command asks the desktop rather than launching Codex from the editor.
 - Run `npm.cmd run vscode:smoke-ipc` to test two isolated VS Code hosts against one synthetic coordinator. To include the disposable native discovery and hook-list checks in `npm.cmd test`, set `PAWMETRY_NATIVE_IPC_TEST=1` and `PAWMETRY_NATIVE_HOOKS_TEST=1` in the test shell.
 - Run `npm.cmd run desktop:smoke-lock` to verify the desktop single-instance lock using an isolated profile and zero provider requests.
+- Run `npm.cmd run desktop:smoke-performance` for five samples of hidden, offline companion CPU and process working sets in an isolated profile.
+
+## Test Codex activity in disposable workspaces
+
+1. Start Pawmetry and choose **Start or stop disposable Codex activity**. The companion shows the two new folders under local application data. Keep the companion running while testing.
+2. Open each folder in a separate local VS Code window. Inspect the generated `.codex/hooks.json`. Each entry runs the local Pawmetry metadata helper with a two-second timeout. It targets this one companion run. Avoid sharing these files because they contain a local receiver capability.
+3. Use Codex’s native project and hook review. Trust only the exact definitions you reviewed if you agree to the test. Official documentation describes `/hooks` for the CLI. If your IDE offers no review, record the IDE check as unavailable. Check for hook-policy warnings or a need to open a disposable conversation after enabling hooks. [Codex hook discovery and trust](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks)
+4. Follow [the manual test matrix](MANUAL_TESTS.md) for model-only work, tool work, interruption, multiple sessions and minimization. If Pawmetry stays unknown, verify the active Codex working folder is one of the two shown and that the exact hooks are active. The desktop and extension show aggregate observations. A specific editor window's session identity remains unknown.
+5. Close the disposable editor windows and use the same tray command to stop the receiver. Pawmetry removes its unchanged configurations and empty folders. After an unexpected exit, remove only the generated `.codex/hooks.json` in those disposable folders after reviewing it. Reopening the activity setup creates new folders and a fresh receiver.
+
+Existing projects require individual approval to prepare their hook changes. Codex’s hook discovery and the Pawmetry receiver have passed separate automated checks. Native trusted delivery from VS Code remains open. Hook evidence can indicate working, interruption, stale or disconnected. Waiting, task success, failure and idle remain unknown when there is no authoritative signal.
 
 ## Build and package locally
 
@@ -42,9 +53,9 @@ Run `npm.cmd ci`, then `npm.cmd test`. Run `npm.cmd run build:local` to stage se
 
 Verify an artifact using `& .\tools\test-desktop-package.ps1 -Zip <zip-path>` or `npm.cmd run vscode:smoke-ipc -- <vsix-path>`. Both use disposable profiles and make zero provider requests.
 
-1. Extract the ZIP into a user-owned folder and launch `Pawmetry.exe`. It starts in simulation. The tray controls live quota, size, pause, reduced motion, and optional low-quota alerts.
-2. For the extension, choose **Install from VSIX** in VS Code and select the local package. Use local trusted VS Code windows with the companion running. **Pawmetry: Connect to Companion**, **Show Companion**, and **Hide Companion** use the local endpoint. A standalone quota read is available through `npm.cmd run quota:probe` if the desktop is unavailable.
-3. Quit from the tray before moving or removing the extracted folder. Uninstall **Pawmetry Prototype** in the VS Code Extensions view. To reset desktop preferences, exit and remove only `%APPDATA%\Pawmetry\companion.json`.
+1. Extract the ZIP into a user-owned folder and launch `Pawmetry.exe`. Quota starts in simulation. Tray **Settings** has three visible layouts, separate pet and per-layout window sizes, monitor placement, animation and global shortcut options, and individually configurable quota notifications. Tray **Show or hide** keeps monitoring independent of visibility. **Pause monitoring** stops quota requests and clears hook observations until resumed.
+2. For the extension, choose **Install from VSIX** in VS Code and select the local package. If an older development copy has the same version, reinstall it with `code.cmd --install-extension <vsix-path> --force`. Open the **Pawmetry** view in Explorer or use the `Pawmetry:` commands. The companion must be running for these controls and real quota. A standalone quota read is available through `npm.cmd run quota:probe` if the desktop is unavailable.
+3. Windows startup is off by default. The packaged app offers a per-user setting after a confirmation showing the executable path. Remove that entry from tray **Settings > Windows startup** before moving or deleting the portable folder if you opted in. Quit before uninstalling the VSIX or removing the extracted app. To reset desktop preferences, exit and remove only `%APPDATA%\Pawmetry\companion.json`.
 
 The artifacts are unsigned local-development packages. An installer decision remains open while licensing, publisher identity, signing and Start Menu registration are reviewed. NSIS supports a future per-user installer. Native Windows toasts may require Start Menu registration. The companion displays its own low-quota notice when visible even if Windows suppresses the toast. [Electron Builder NSIS](https://www.electron.build/nsis.html) · [Electron notifications on Windows](https://www.electronjs.org/docs/latest/tutorial/notifications#windows)
 
@@ -64,6 +75,7 @@ If the editor reports disconnected, check the companion tray and the current Win
 | [Quota probe report](QUOTA_PROBE_REPORT.md) | Runtime evidence, limits and manual validation |
 | [Development status](DEVELOPMENT_STATUS.md) | Verified checkpoints and next steps |
 | [Manual tests](MANUAL_TESTS.md) | Pending graphical and provider QA |
+| [Animation asset specification](ANIMATION_ASSET_SPEC.md) | Mascot frames, atlas format, movement and asset validation |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Prior art, licenses and artwork policy |
 | [Contributor guidance](AGENTS.md) | Repository rules and phase boundaries |
 

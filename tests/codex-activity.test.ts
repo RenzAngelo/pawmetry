@@ -68,10 +68,13 @@ test("workspace reducer handles concurrent tools, missed starts, duplicates, and
   assert.equal(timeline.observe(a, 1001), true);
   assert.equal(timeline.observe(a, 1001), false);
   timeline.observe(b, 1001);
+  const second = projectHook({ ...input, session_id: "other-conversation" }, token, "A", 1002)!;
+  timeline.observe(second, 1002);
   timeline.observe(event("PostToolUse", 1200, "tool-late"), 1200);
   assert.equal(timeline.observe(event("PreToolUse", 1100, "tool-late"), 1201), false);
   timeline.observe(event("PostToolUse", 1202), 1202);
   assert.equal(timeline.state("A", a.session, 1210), "unknown");
+  assert.equal(timeline.state("A", second.session, 1210), "working");
   assert.equal(timeline.state("B", b.session, 1210), "working");
   timeline.observe(event("Interrupt", 1250), 1250);
   assert.equal(timeline.state("A", a.session, 1250), "interrupted");
@@ -98,4 +101,21 @@ test("missing close events go stale and recovery requires new session evidence a
   timeline.observe(send("Stop", 18102), 18102);
   assert.equal(timeline.state("A", start.session, 18102), "unknown");
   await invoke("{malformed", 9, "Stop");
+});
+
+test("model-only work expires, a post result is not a task outcome, and Stop permits continuation", () => {
+  const timeline = new HookTimeline();
+  const send = (hook_event_name: string, sentAt: number) =>
+    projectHook({ ...input, hook_event_name, status: "failed", error: "model-error-canary" }, token, "A", sentAt)!;
+  const before = send("PreModelRequest", 1000);
+  assert.doesNotMatch(sealObservation(before, token).toString(), /canary|failed/);
+  timeline.observe(before, 1000);
+  assert.equal(timeline.aggregate(1000), "working");
+  timeline.observe(send("PostModelRequest", 1200), 1200);
+  assert.equal(timeline.aggregate(1200), "unknown");
+  assert.equal(timeline.observe(send("PreModelRequest", 1100), 1300), false);
+  timeline.observe(send("Stop", 1300), 1300);
+  assert.equal(timeline.observe(send("PreModelRequest", 1400), 1400), true);
+  assert.equal(timeline.aggregate(1400), "working");
+  assert.equal(timeline.aggregate(16400), "stale");
 });

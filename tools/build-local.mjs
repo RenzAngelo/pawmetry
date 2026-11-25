@@ -35,6 +35,8 @@ await copy([
   "apps/desktop/renderer.js", "apps/desktop/style.css", "packages/animation/animation.ts",
   "packages/telemetry/quota-manager.ts", "tools/codex-quota-probe/app-server.ts",
   "tools/codex-quota-probe/discovery.ts", "tools/codex-quota-probe/quota.ts", "tools/codex-quota-probe/telemetry.ts",
+  "tools/codex-activity-probe/hook.ts", "tools/codex-activity-probe/protocol.ts",
+  "tools/codex-activity-probe/receiver.ts", "tools/codex-activity-probe/timeline.ts",
   "THIRD_PARTY_NOTICES.md",
 ], desktopApp);
 await writeFile(join(desktopApp, "package.json"),

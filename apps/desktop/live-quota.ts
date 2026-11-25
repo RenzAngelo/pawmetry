@@ -1,5 +1,5 @@
-import { petState } from "../../packages/behavior/behavior.ts";
-import type { Meter, Status } from "../../packages/ipc/protocol.ts";
+import { confirmedRestorations, petState } from "../../packages/behavior/behavior.ts";
+import type { CompanionActivity, Meter, Status } from "../../packages/ipc/protocol.ts";
 import { quotaScopeKey, windowAvailable, type QuotaSnapshot } from "../../packages/telemetry/model.ts";
 import { QuotaManager } from "../../packages/telemetry/quota-manager.ts";
 import { probeQuota } from "../../tools/codex-quota-probe/app-server.ts";
@@ -29,9 +29,9 @@ export function createLiveQuota(now = Date.now, read = readCodex, elapsed = now 
     const active = control;
     const startedAt = now();
     const elapsedAtStart = elapsed();
-    if (!active || work || elapsedAtStart < minimumAt || elapsedAtStart < backoffAt) return;
+    if (!active || work || elapsedAtStart < minimumAt || elapsedAtStart < backoffAt) return false;
     if (!force && current && startedAt >= current.observedAtMs && startedAt < current.validUntilMs
-      && current.windows.every((window) => window.resetsAtMs === null || window.resetsAtMs > startedAt)) return;
+      && current.windows.every((window) => window.resetsAtMs === null || window.resetsAtMs > startedAt)) return false;
     minimumAt = elapsedAtStart + minSpacing;
     work = Promise.resolve().then(() => read(active.signal)).then(async (value) => {
       if (control !== active) return;
@@ -55,6 +55,7 @@ export function createLiveQuota(now = Date.now, read = readCodex, elapsed = now 
         backoffAt = elapsed() + Math.min(120_000, minSpacing * 2 ** Math.min(failures - 1, 3));
       }
     }).finally(() => { work = null; });
+    return true;
   }
 
   function enable() {
@@ -73,9 +74,9 @@ export function createLiveQuota(now = Date.now, read = readCodex, elapsed = now 
     return work;
   }
 
-  function view() {
+  function view(activity: CompanionActivity = "unknown") {
     const at = now();
-    const pet = petState(current, "unknown", at, previous);
+    const pet = petState(current, activity === "stale" ? "unknown" : activity, at, previous);
     function meter(slot: "energy" | "stamina"): Meter {
       const windows = current?.windows.filter((window) => window.slot === slot) ?? [];
       if (!current || windows.length !== 1 || !windowAvailable(current, windows[0], at)) return emptyMeter();
@@ -85,12 +86,13 @@ export function createLiveQuota(now = Date.now, read = readCodex, elapsed = now 
     const stamina = meter("stamina");
     const available = energy.remaining !== null || stamina.remaining !== null;
     const status: Status = {
-      mode: control ? "live" : "simulation", activity: "unknown",
+      mode: control ? "live" : "simulation", activity,
       quota: !control ? "offline" : available ? "fresh" : work ? "loading" : current ? "stale" : "unavailable",
       validUntil: available ? current?.validUntilMs ?? null : null,
       energy: available ? energy : emptyMeter(), stamina: available ? stamina : emptyMeter(),
     };
-    return { status, pet };
+    return { status, pet, observation: current ? { at: current.observedAtMs, scope: quotaScopeKey(current.scope),
+      restored: confirmedRestorations(previous, current, at) } : null };
   }
 
   return { enable, disable, refresh, view };

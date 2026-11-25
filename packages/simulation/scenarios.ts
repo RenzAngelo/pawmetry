@@ -2,7 +2,7 @@ import { petState } from "../behavior/behavior.ts";
 import type { ActivityState, QuotaScope, QuotaSnapshot } from "../telemetry/model.ts";
 
 const scope: QuotaScope = { provider: "codex", sourceId: "demo", mode: "simulation",
-  authMode: "simulated", accountKey: null, quotaScopeKey: null };
+  authMode: "simulated", accountKey: "demo-account", quotaScopeKey: "demo-scope" };
 
 function reading(at: number, energy: number, stamina: number, resetsAt: number, blocking = false): QuotaSnapshot {
   return { scope, observedAtMs: at, validUntilMs: at + 60_000, providerObservedAtMs: null, windows: [

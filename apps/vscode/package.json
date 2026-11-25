@@ -11,11 +11,18 @@
   "activationEvents": ["onStartupFinished"],
   "capabilities": { "untrustedWorkspaces": { "supported": false } },
   "contributes": {
+    "views": { "explorer": [{ "id": "pawmetry.controls", "name": "Pawmetry", "visibility": "collapsed" }] },
     "commands": [
       { "command": "pawmetry.refreshQuota", "title": "Pawmetry: Refresh Codex Quota" },
       { "command": "pawmetry.connectDesktop", "title": "Pawmetry: Connect to Companion" },
       { "command": "pawmetry.showDesktop", "title": "Pawmetry: Show Companion" },
       { "command": "pawmetry.hideDesktop", "title": "Pawmetry: Hide Companion" },
+      { "command": "pawmetry.desktopSettings", "title": "Pawmetry: Open Companion Settings" },
+      { "command": "pawmetry.pauseAnimations", "title": "Pawmetry: Pause Animations" },
+      { "command": "pawmetry.resumeAnimations", "title": "Pawmetry: Resume Animations" },
+      { "command": "pawmetry.pauseMonitoring", "title": "Pawmetry: Pause Monitoring" },
+      { "command": "pawmetry.resumeMonitoring", "title": "Pawmetry: Resume Monitoring" },
+      { "command": "pawmetry.exitCompanion", "title": "Pawmetry: Exit Companion" },
       { "command": "pawmetry.nextSimulation", "title": "Pawmetry: Next Simulation Scenario" },
       { "command": "pawmetry.stopSimulation", "title": "Pawmetry: Stop Simulation" }
     ]

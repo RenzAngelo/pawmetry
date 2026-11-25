@@ -22,7 +22,7 @@ export type QuotaSnapshot = {
   windows: readonly QuotaWindow[];
 };
 
-export type Activity = "tool-started" | "thinking" | "waiting" | "completed" | "interrupted";
+export type Activity = "working" | "tool-started" | "thinking" | "waiting" | "completed" | "interrupted";
 export type ActivityObservation = {
   source: Source;
   generation: number;

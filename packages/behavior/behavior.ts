@@ -10,16 +10,17 @@ export type PetState = {
   speed: number;
 };
 
-function confirmedReset(previous: QuotaSnapshot | null, current: QuotaSnapshot, now: number): boolean {
-  if (!previous || quotaScopeKey(previous.scope) !== quotaScopeKey(current.scope)
-    || current.observedAtMs <= previous.observedAtMs || now - current.observedAtMs >= 8000) return false;
-  return previous.windows.some((old) => {
+export function confirmedRestorations(previous: QuotaSnapshot | null, current: QuotaSnapshot, now: number) {
+  if (!previous || !current.scope.accountKey || !current.scope.quotaScopeKey
+    || quotaScopeKey(previous.scope) !== quotaScopeKey(current.scope)
+    || current.observedAtMs <= previous.observedAtMs || now - current.observedAtMs >= 8000) return [];
+  return previous.windows.flatMap((old) => {
     if (old.slot === "other" || old.resetsAtMs === null || old.remainingPercent === null
-      || old.resetsAtMs > current.observedAtMs) return false;
+      || old.resetsAtMs > current.observedAtMs) return [];
     const fresh = current.windows.find((window) => window.id === old.id && window.slot === old.slot);
     return fresh !== undefined && windowAvailable(current, fresh, now) && fresh.resetsAtMs !== null
       && fresh.resetsAtMs > old.resetsAtMs && fresh.remainingPercent !== null
-      && fresh.remainingPercent > old.remainingPercent;
+      && fresh.remainingPercent > old.remainingPercent ? [old.slot] : [];
   });
 }
 
@@ -34,12 +35,14 @@ export function petState(current: QuotaSnapshot | null, activity: ActivityState,
   const lowest = known.length ? Math.min(...known) : null;
   const result = (pose: Pose, speed: number): PetState => ({ pose, energy, stamina, speed });
 
-  if (available.some((window) => window.blocking && window.remainingPercent === 0)) return result("sleeping", 0);
-  if (activity === "tool-started") return result("working", lowest === null ? 0.65 : Math.max(0.2, lowest / 100));
+  if (activity === "working" || activity === "tool-started") {
+    return result("working", lowest === null ? 0.65 : Math.max(0.2, lowest / 100));
+  }
   if (activity === "thinking" || activity === "waiting" || activity === "completed" || activity === "interrupted") {
     return result(activity, 0);
   }
-  if (current && confirmedReset(previous, current, now)) return result("recharging", 0.35);
+  if (available.some((window) => window.blocking && window.remainingPercent === 0)) return result("sleeping", 0);
+  if (current && confirmedRestorations(previous, current, now).length) return result("recharging", 0.35);
   if (lowest === null) return result(activity === "disconnected" ? "disconnected" : "unknown", 0);
   if (lowest <= 10) return result("exhausted", 0.2);
   if (lowest <= 35) return result("tired", 0.4);
