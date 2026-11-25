@@ -146,6 +146,7 @@ function workspaces(rows, hasReviewCommand) {
       review.type = "button";
       review.dataset.review = "true";
       review.textContent = "Copy Codex review command";
+      review.setAttribute("aria-describedby", "codex-review-status");
       review.addEventListener("click", async () => {
         await action("review-" + label);
         put(byId("settings-error"), "Paste the command into Windows PowerShell, then type /hooks inside Codex.");
@@ -218,7 +219,22 @@ function render(view) {
   byId("start-activity").disabled = activity.state === "starting" || activity.state === "stopping";
   byId("startup").hidden = !view.canSetStartup;
   byId("next-scenario").disabled = view.liveSelected || view.monitoringPaused;
-  workspaces(activity.workspaces);
+  const needsCodex = prepared && !activity.hasReviewCommand;
+  const discoveryStatus = view.codexInstall.status;
+  const reviewStatus = {
+    unchecked: "Pawmetry needs to find one supported local Codex executable before it can copy the review command.",
+    checking: "Looking for the local Codex executable. The review buttons will become available when it is found.",
+    missing: "Pawmetry could not find the Codex executable bundled with the local VS Code extension. Check that the OpenAI Codex extension is installed in this Windows VS Code profile, then try again.",
+    ambiguous: "Pawmetry found multiple eligible Codex installations. Use the executable from the VS Code extension you are testing to open native review manually.",
+    unsupported: "Automatic Codex detection here requires the local Windows x64 VS Code bundle.",
+  }[discoveryStatus];
+  const status = byId("codex-review-status");
+  status.hidden = !needsCodex;
+  put(status, needsCodex ? reviewStatus ?? "The local Codex executable is not ready. Find Codex again to retry." : "");
+  const retry = byId("retry-codex-review");
+  retry.hidden = !needsCodex || discoveryStatus === "unsupported";
+  retry.disabled = discoveryStatus === "checking";
+  workspaces(activity.workspaces, activity.hasReviewCommand);
 }
 
 async function read() {

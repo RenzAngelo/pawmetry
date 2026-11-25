@@ -106,6 +106,8 @@
             <li>Copy the Codex review command for that folder. Run it in Windows PowerShell, then type <code>/hooks</code> in the Codex terminal. Review only the Pawmetry entries for that disposable folder, and approve them if you agree.</li>
             <li>Use <strong>Open in VS Code</strong>. Try a model-only turn after approval. A matching file and a passing transport check cannot confirm native approval.</li>
           </ol>
+          <p id="codex-review-status" role="status" hidden></p>
+          <button type="button" id="retry-codex-review" data-action="detect-codex" hidden>Find Codex again</button>
           <div id="workspaces"></div>
         </div>
         <p id="retained-paths"></p>

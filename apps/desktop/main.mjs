@@ -407,6 +407,29 @@ async function smokeActivity() {
   await panel.webContents.executeJavaScript("document.querySelector('#start-activity').click()");
   await until(async () => activityReceiver && !activityTask && await panel.webContents.executeJavaScript(
     "document.querySelector('#diagnostic-state').textContent === 'Native approval not verified'"), "Settings created two disposable workspaces and is awaiting events");
+  const reviewControls = await panel.webContents.executeJavaScript(`(() => {
+    const original = snapshot;
+    const disabled = () => [...document.querySelectorAll('[data-review]')].map((button) => button.disabled);
+    const status = document.querySelector('#codex-review-status');
+    const retry = document.querySelector('#retry-codex-review');
+    function giveDiscovery(status, available) {
+      render({ ...original, quota: 'offline', liveSelected: false, monitoringPaused: true,
+        codexInstall: { status }, activity: { ...original.activity, hasReviewCommand: available } });
+    }
+    try {
+      giveDiscovery('found', true);
+      const available = { disabled: disabled(), hintHidden: status.hidden };
+      giveDiscovery('missing', false);
+      const missing = { disabled: disabled(), hint: status.textContent, canRetry: !retry.hidden && !retry.disabled };
+      giveDiscovery('checking', false);
+      return { available, missing, waiting: !status.hidden && retry.disabled };
+    } finally { render(original); }
+  })()`);
+  assert.deepEqual(reviewControls.available, { disabled: [false, false], hintHidden: true }, "both review buttons use discovery even in simulation when monitoring is paused");
+  assert.deepEqual(reviewControls.missing.disabled, [true, true]);
+  assert.match(reviewControls.missing.hint, /could not find the Codex executable/);
+  assert.equal(reviewControls.missing.canRetry, true);
+  assert.equal(reviewControls.waiting, true);
   const receiver = activityReceiver;
   assert.deepEqual(await receiver.checkConfigurations(), { A: "present", B: "present" });
   await panel.webContents.executeJavaScript("document.querySelector('#check-hooks').click()");

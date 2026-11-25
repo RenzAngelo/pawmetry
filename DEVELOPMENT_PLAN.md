@@ -37,3 +37,7 @@ Record two-window conversation continuity before merging Probe A. Its [quota pro
 ## Recommended next milestone
 
 Validate Probe B end to end with the desktop’s disposable workspaces. The installed App Server discovered the eight generated hooks while they were untrusted, and synthetic input reached the renderer through the Windows helper path. Use normal native trust and check actual `PreModelRequest` and `PreToolUse` delivery with VS Code visible and minimized, overlapping sessions, removal, and unchanged behavior. A confirmed interrupt is distinct from a `Stop` or a model-attempt outcome. Prepare an exact project enrollment and rollback preview only after the disposable result and separate consent. [Codex hooks](https://learn.chatgpt.com/docs/hooks) · [Activity acceptance tests](TEST_PLAN.md#independent-provider-validation)
+
+## Desktop backlog
+
+- Make the floating companion’s More Options menu avoid overlapping the pet. Prefer opening to the right when the display work area has room, fall back to the left or another suitable direction, and verify placement at monitor edges and mixed DPI. Keep this behind native activity validation.
