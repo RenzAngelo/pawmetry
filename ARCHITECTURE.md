@@ -61,7 +61,7 @@ The desktop main process will host one quota manager and one session registry pe
 
 **Unified display.** The first mode shows one pet reflecting observed concurrent activity, with deterministic handling of simultaneous events and a shared quota view for the selected scope. The dashboard can identify independent session states or report unknown. Multiple quota scopes remain separate. Later modes may follow a selected project, workspace or provider and may introduce multiple pets.
 
-The quota manager and session registry now run in memory and have synthetic concurrency coverage. The activity probe uses a per-run loopback capability in disposable workspaces, separate from the planned desktop IPC. The desktop prototype uses offline simulation while native IDE activity and the IPC transport remain under validation. [Development status](DEVELOPMENT_STATUS.md)
+The quota manager and session registry run in memory. The separate disposable hook probe uses workspace-specific capabilities and a bounded observation timeline. It signs sanitized datagrams, remembers recent deliveries and tool/turn endings, and expires tool-start evidence when closing evidence is missing. Absence produces stale or unknown. The prototype does not feed hook candidates into the live desktop or editor before native delivery is verified. [Development status](DEVELOPMENT_STATUS.md) · [Codex hooks](https://learn.chatgpt.com/docs/hooks)
 
 ## Desktop and IPC
 
