@@ -8,6 +8,6 @@
   },
   "scripts": {
     "quota:probe": "node tools/codex-quota-probe/cli.ts",
-    "test": "node --test tests/codex-quota-probe.test.ts"
+    "test": "node --test tests/*.test.ts"
   }
 }

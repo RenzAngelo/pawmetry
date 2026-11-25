@@ -6,19 +6,18 @@ Pawmetry is a planned free, open-source, privacy-first desktop pet and VS Code e
 
 ## Project status
 
-The quota probe has retrieved live Codex account limits on Windows 11 x64. Three paired comparisons with the official usage interface and a two-window VS Code check remain open. Windows 11 and VS Code desktop are the first product target. Claude Code and GitHub Copilot are subsequent candidates. [Quota probe report](QUOTA_PROBE_REPORT.md)
+The quota probe has retrieved live Codex account limits on Windows 11 x64. Three maintainer-paired dashboard comparisons matched both quota windows. The provider workspace label and data age remain unknown, and the two-window VS Code continuity check remains open. Windows 11 and VS Code desktop are the first product target. Claude Code and GitHub Copilot are subsequent candidates. [Quota probe report](QUOTA_PROBE_REPORT.md)
 
 ## Run the quota probe
 
 Use Node.js 24 or later and an installed native Codex executable with an existing Codex-managed ChatGPT sign-in. From this repository in a normal Windows PowerShell:
 
 ~~~powershell
-$codexExecutable = (Get-Command codex -CommandType Application -ErrorAction Stop).Source
-npm.cmd run --silent quota:probe -- --codex "$codexExecutable"
+npm.cmd run --silent quota:probe
 npm.cmd test
 ~~~
 
-If `Get-Command` fails or resolves only a shim, pass the absolute path to the trusted native `codex.exe` directly:
+On Windows x64 the probe checks the default local VS Code extension directory for one eligible OpenAI bundle. For custom locations or multiple eligible versions, select the trusted native executable explicitly:
 
 ~~~powershell
 npm.cmd run --silent quota:probe -- --codex "C:\path\to\codex.exe"
@@ -40,6 +39,8 @@ Add `--show-workspace` to display the provider's workspace label locally when su
 | [Security](SECURITY.md) | Data boundaries, threat model and consent |
 | [Test plan](TEST_PLAN.md) | Acceptance and support criteria |
 | [Quota probe report](QUOTA_PROBE_REPORT.md) | Runtime evidence, limits and manual validation |
+| [Development status](DEVELOPMENT_STATUS.md) | Verified checkpoints and next steps |
+| [Manual tests](MANUAL_TESTS.md) | Pending graphical and provider QA |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Prior art, licenses and artwork policy |
 | [Contributor guidance](AGENTS.md) | Repository rules and phase boundaries |
 
