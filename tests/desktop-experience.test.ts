@@ -3,7 +3,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { defaults, dimensions, fitBounds, loadPreferences, preferences, savePreferences } from "../apps/desktop/preferences.ts";
+import { defaults, dimensions, fitBounds, loadPreferences, placeSettings, preferences, savePreferences } from "../apps/desktop/preferences.ts";
+import { validSetting } from "../apps/desktop/settings-model.ts";
 import { quotaAlerts } from "../apps/desktop/quota-alerts.ts";
 import { animationStyle, frameAt, motionFor, prototypeProfile } from "../packages/animation/animation.ts";
 import type { Status } from "../packages/ipc/protocol.ts";
@@ -39,6 +40,29 @@ test("window bounds remain usable across negative monitor coordinates and remova
     { ...bounds, y: 672 });
   assert.deepEqual(fitBounds(bounds, { x: 0, y: 40, width: 300, height: 280 }),
     { x: 0, y: 40, width: 300, height: 280 });
+});
+
+test("Settings restores independently and recovers invalid or removed-monitor positions", () => {
+  const primary = { x: 0, y: 40, width: 1280, height: 920 };
+  const secondary = { x: -1920, y: 0, width: 1920, height: 1040 };
+  const saved = { x: -450, y: 215, width: 680, height: 720 };
+  assert.deepEqual(placeSettings(saved, primary, [primary, secondary]), { ...saved, x: -680 });
+  const removed = { ...saved, x: -1600 };
+  assert.deepEqual(placeSettings(removed, primary, [primary]), { ...saved, x: 300, y: 140 });
+  assert.equal(preferences({ settingsBounds: { ...saved, width: Infinity } }).settingsBounds, null);
+  assert.deepEqual(preferences({ settingsBounds: saved }).settingsBounds, saved);
+});
+
+test("Settings accepts only named preferences with exact bounded values", () => {
+  const monitors = [123];
+  assert.equal(validSetting("alwaysOnTop", true, monitors), true);
+  assert.equal(validSetting("alwaysOnTop", "false", monitors), false);
+  assert.equal(validSetting("alert-lowEnergy", "sound", monitors), true);
+  assert.equal(validSetting("monitor", 123, monitors), true);
+  assert.equal(validSetting("monitor", 222, monitors), false);
+  assert.equal(validSetting("mode", "hide", monitors), false);
+  assert.equal(validSetting("settingsBounds", { x: 0 }, monitors), false);
+  assert.equal(validSetting("__proto__", {}, monitors), false);
 });
 
 test("low-quota alerts require opt-in fresh live data and rearm only after recovery", () => {

@@ -1,6 +1,6 @@
-import { app, BrowserWindow, dialog, globalShortcut, Menu, nativeImage, Notification, powerMonitor, screen, Tray } from "electron";
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, screen, Tray } from "electron";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
@@ -16,6 +16,9 @@ import { animationStyle, motionFor } from "../../packages/animation/animation.ts
 import { dimensions, fitBounds, loadPreferences, modes, savePreferences, shortcuts, sizes } from "./preferences.ts";
 import { alertKinds, quotaAlerts } from "./quota-alerts.ts";
 import { prepareReceiver } from "../../tools/codex-activity-probe/receiver.ts";
+import { isLocalSender, localWindow } from "./local-window.mjs";
+import { createSettingsWindow, settingsUrl } from "./settings-window.mjs";
+import { validSetting } from "./settings-model.ts";
 
 const liveSmoke = process.argv.includes("--smoke-live");
 const performanceSmoke = process.argv.includes("--smoke-performance");
@@ -52,19 +55,29 @@ let saveTimer;
 let notice;
 let activityTask;
 let activityReceiver;
+let activityStopping;
+let activityIssue = "";
+let activityChecks = {};
+let retainedActivityPaths = [];
 let monitoringPaused = false;
 let liveSelected = false;
 let mouseIgnored = false;
 let hovered = false;
 let hitTimer;
 let wakeAt = 0;
-let settingsMenu;
 let controlMenu;
 const petScales = { small: 0.8, standard: 1, large: 1.2 };
 const live = createLiveQuota();
 const preferencePath = join(userData, "companion.json");
 const preferences = loadPreferences(preferencePath);
 const takeAlerts = quotaAlerts();
+const petUrl = new URL("./index.html", import.meta.url).href;
+const settings = createSettingsWindow({ saved: () => preferences.settingsBounds,
+  move: (bounds) => { preferences.settingsBounds = bounds; persist(); }, closing: () => closing,
+  fallback: () => (window?.isVisible() ? screen.getDisplayMatching(window.getBounds())
+    : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())).workArea,
+  visibility: applyAlwaysOnTop,
+});
 
 function companionView() {
   const view = live.view(monitoringPaused ? "unknown" : activityReceiver?.aggregate());
@@ -87,35 +100,63 @@ function pauseAnimation(value) {
   paint();
 }
 
-async function toggleActivity() {
-  if (activityTask) return;
-  if (activityReceiver) {
+async function setActivity(enabled) {
+  if (activityTask || activityStopping) return;
+  if (!enabled && activityReceiver) {
     const receiver = activityReceiver;
     activityReceiver = undefined;
-    if (!await receiver.close()) dialog.showErrorBox("Pawmetry activity", "An edited disposable hooks.json needs manual removal.");
+    activityStopping = receiver.close().catch(() => false);
+    paint();
+    const clean = await activityStopping;
+    activityStopping = undefined;
+    retainedActivityPaths = clean ? [] : Object.values(receiver.paths);
+    activityIssue = clean ? "" : "A changed disposable hooks.json was left in place. Review and remove Pawmetry’s entries manually.";
     paint();
     return;
   }
+  if (!enabled || activityReceiver || process.platform !== "win32" || closing) return;
+  activityIssue = "";
+  retainedActivityPaths = [];
+  activityChecks = {};
   activityTask = prepareReceiver({ electron: true, onChange: paint, onError: () => {
-    if (activityReceiver) void toggleActivity();
+    if (activityReceiver) void setActivity(false).then(() => {
+      activityIssue = ["The local receiver stopped unexpectedly.", activityIssue].filter(Boolean).join(" ");
+      paint();
+    });
   } });
+  paint();
   try {
     activityReceiver = await activityTask;
     activityReceiver.setPaused(monitoringPaused);
-    if (closing) return;
-    void dialog.showMessageBox({ title: "Pawmetry activity", message: "Disposable Codex workspaces are ready",
-      detail: `Open these folders in separate VS Code windows. Review the generated .codex/hooks.json and use Codex’s native hook review.\n\n${activityReceiver.paths.A}\n${activityReceiver.paths.B}\n\nUse the same tray command to stop and remove unchanged hook files.` });
+    activityChecks = { A: "present", B: "present" };
   } catch {
-    dialog.showErrorBox("Pawmetry activity", "The disposable activity receiver could not start.");
+    activityIssue = "The disposable receiver could not start. Check Windows PowerShell policy and local application data access.";
   } finally {
     activityTask = undefined;
     paint();
   }
 }
 
+function activityStatus(status) {
+  const workspaces = activityReceiver?.diagnostics().map((row) => ({ ...row, configuration: activityChecks[row.label] ?? "unchecked" })) ?? [];
+  const observed = workspaces.some(({ seen }) => seen);
+  const expired = workspaces.some(({ last, states }) => last && states.length === 0);
+  const state = activityStopping ? "stopping" : activityTask ? "starting" : monitoringPaused ? "paused" : !activityReceiver ? "unconfigured"
+    : !observed ? "review" : status.activity === "unknown" ? (expired ? "stale" : "no-active-sessions") : status.activity;
+  return { state, workspaces, issue: activityIssue, retainedPaths: retainedActivityPaths, available: process.platform === "win32" };
+}
+
+function settingsState() {
+  const { status } = companionView();
+  return { preferences, quota: status.quota, liveSelected, monitoringPaused, activity: activityStatus(status),
+    displays: screen.getAllDisplays().map(({ id, label }, i) => ({ id, label: label || `Display ${i + 1}` })),
+    canSetStartup: app.isPackaged && process.platform === "win32" };
+}
+
 function paint() {
   if (!window || window.isDestroyed()) return;
   const { status, pet } = companionView();
+  if (settings.window?.isVisible() && !settings.window.isMinimized()) settings.window.webContents.send("pawmetry:settings-view", settingsState());
   const simulation = status.mode === "simulation";
   const now = Date.now();
   const sample = simulation && !monitoringPaused ? simulate(scenarios[scenario], scenarioAt) : null;
@@ -126,11 +167,11 @@ function paint() {
   window.webContents.send("pawmetry:view", {
     pet: shown, motion: { ...motion, width: motion.width * petScales[preferences.petSize],
       height: motion.height * petScales[preferences.petSize], durationMs: Math.round(motion.durationMs / preferences.speed) },
-    mode: status.mode, quota: status.quota, activity: status.activity, observing: !!activityReceiver,
+    mode: status.mode, quota: status.quota, activity: activityStatus(status).state, observing: !!activityReceiver,
     presentation: { mode: preferences.mode, background: preferences.backgroundOpacity, opacity: preferences.petOpacity,
       energy: preferences.energyBar, stamina: preferences.staminaBar, hover: preferences.hoverInfo, hovered,
       roaming: preferences.roaming && !motion.frozen && shown.speed > 0 && ["walking", "running", "slow-walking"].includes(motion.motion),
-      monitoringPaused },
+      monitoringPaused, paused, alwaysOnTop: preferences.alwaysOnTop },
     notice: notice && notice.expires > now && (notice.test || status.quota === "fresh") ? notice.message : "",
     resets: {
       energy: resetText(simulation ? assumed("energy") : status.energy.resetAt, now),
@@ -154,16 +195,7 @@ async function startEndpoint() {
     queueMicrotask(() => app.quit());
     return null;
   }
-  const server = await listenStatus((op) => {
-    if (op === "refresh") live.refresh(true);
-    if (op === "show") recover();
-    if (op === "hide") setVisible(false);
-    if (op === "pause-monitoring" || op === "resume-monitoring") pauseMonitoring(op === "pause-monitoring");
-    if (op === "pause-animation" || op === "resume-animation") pauseAnimation(op === "pause-animation");
-    if (op === "settings") openSettings();
-    if (op === "quit") setTimeout(() => app.quit(), 150);
-    return companionView().status;
-  });
+  const server = await listenStatus((op) => { command(op); return companionView().status; });
   try {
     await windowsEndpoint("publish", server.endpoint, undefined, existing);
     return server;
@@ -186,11 +218,13 @@ async function smokeLive() {
     await windowsEndpoint("publish", server.endpoint, namespace);
     const endpoint = await windowsEndpoint("read", undefined, namespace);
     if (!endpoint || (await askStatus(endpoint, "status")).mode !== "simulation") return false;
-    live.enable();
+    setLiveQuota(true);
     const deadline = performance.now() + 18_000;
     while (performance.now() < deadline) {
       const snapshot = await askStatus(endpoint, "status");
       if (snapshot.quota === "fresh") {
+        assert.equal(snapshot.activity, "unknown");
+        assert.equal(activityStatus(snapshot).state, "unconfigured");
         paint();
         await wait(120);
         return window.webContents.executeJavaScript(
@@ -208,9 +242,75 @@ async function smokeLive() {
   }
 }
 
+async function until(check, description) {
+  const deadline = performance.now() + 3500;
+  while (performance.now() < deadline) {
+    if (await check()) return;
+    await wait(40);
+  }
+  assert.fail(description);
+}
+
+async function smokeControls(menu) {
+  const press = (target, selector) => target.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const pet = (op) => press(window, `[data-command="${op}"]`);
+  await pet("toggle-animation");
+  await until(() => paused && menu.getMenuItemById("animation-pause").checked, "window and tray agree on animation pause");
+  await pet("toggle-animation");
+  await until(() => !paused, "animation resumed");
+  await pet("toggle-top");
+  await until(() => !preferences.alwaysOnTop && !window.isAlwaysOnTop(), "always-on-top disabled");
+  await pet("toggle-top");
+  await until(() => preferences.alwaysOnTop && window.isAlwaysOnTop(), "always-on-top restored");
+  await pet("display-next");
+  await until(() => preferences.mode === "pet", "toolbar changed display mode and native bounds");
+  assert.deepEqual(window.getSize(), [...dimensions.pet[preferences.windowSizes.pet]]);
+  selectMode("dashboard");
+  await pet("hide");
+  await until(() => !window.isVisible(), "button hid the companion");
+  setClickThrough(true);
+  preferences.settingsBounds = { x: -99000, y: -99000, width: 680, height: 700 };
+  menu.getMenuItemById("settings").click();
+  await until(() => settings.window?.isVisible(), "tray Settings callback showed an independent window");
+  const first = settings.window;
+  const settingsId = first.id;
+  const placed = first.getBounds();
+  assert.deepEqual(fitBounds(placed, screen.getDisplayMatching(placed).workArea), placed);
+  assert.equal(window.isVisible(), false, "Settings left the pet hidden");
+  assert.equal(preferences.clickThrough, true, "Settings did not change click-through");
+  await until(() => first.webContents.executeJavaScript("document.querySelector('#activity-state').textContent === 'Activity monitoring not configured'"), "Settings connected to its local preload");
+  assert.equal((await first.webContents.capturePage()).isEmpty(), false, "native Settings rendered a nonempty frame");
+  first.minimize();
+  menu.getMenuItemById("settings").click();
+  await until(() => first.isVisible() && !first.isMinimized(), "Settings restored from minimize");
+  assert.equal(settings.window.id, settingsId);
+  assert.equal(BrowserWindow.getAllWindows().length, 2);
+  await first.webContents.executeJavaScript("history.replaceState(null, '', '#appearance')");
+  await press(first, "#setting-reducedMotion");
+  await until(() => loadPreferences(preferencePath).reducedMotion, "Settings changes persist to disk");
+  assert.equal(await first.webContents.executeJavaScript("pawmetrySettings.update('settingsBounds', [])"), "Invalid setting.");
+  await press(first, "#setting-reducedMotion");
+  await until(() => !loadPreferences(preferencePath).reducedMotion, "Settings can revert a preference");
+  command("show");
+  assert.equal(window.isVisible(), true);
+  assert.equal(preferences.clickThrough, false);
+  first.hide();
+  await pet("settings");
+  await until(() => settings.window?.isVisible(), "pet Settings button opened the window");
+  assert.equal(settings.window.id, settingsId);
+  first.close();
+  await until(() => !settings.window, "closing Settings destroys just its window");
+  assert.equal(window.isAlwaysOnTop(), true);
+  console.log("Desktop Settings, toolbar actions, off-screen recovery, and shared preference persistence passed.");
+}
+
 async function smokeActivity() {
-  const receiver = await prepareReceiver({ electron: true, onChange: paint });
-  activityReceiver = receiver;
+  const panel = await openSettings();
+  await panel.webContents.executeJavaScript("document.querySelector('#start-activity').click()");
+  await until(async () => activityReceiver && !activityTask && await panel.webContents.executeJavaScript(
+    "document.querySelector('#activity-state').textContent === 'Native hook approval required'"), "Settings created two disposable workspaces and is awaiting events");
+  const receiver = activityReceiver;
+  assert.deepEqual(await receiver.checkConfigurations(), { A: "present", B: "present" });
   async function deliver(folder, name) {
     const command = JSON.parse(readFileSync(join(folder, ".codex", "hooks.json"), "utf8")).hooks[name][0].hooks[0].command;
     const shell = join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
@@ -226,6 +326,9 @@ async function smokeActivity() {
     await Promise.all(Object.values(receiver.paths).map((folder) => deliver(folder, "PreModelRequest")));
     assert.deepEqual(receiver.states().map((item) => item.workspace).sort(), ["A", "B"]);
     assert.equal(companionView().status.activity, "working");
+    await until(() => panel.webContents.executeJavaScript(
+      "document.querySelector('#activity-state').textContent === 'Activity monitoring connected' && document.querySelectorAll('.workspace').length === 2"),
+    "work in both disposable folders reached Settings while the pet was hidden");
     window.showInactive();
     assert.match(await window.webContents.executeJavaScript("document.querySelector('#activity').textContent"), /working/);
     await deliver(receiver.paths.A, "Interrupt");
@@ -238,9 +341,17 @@ async function smokeActivity() {
     pauseMonitoring(false);
     await deliver(receiver.paths.B, "PreModelRequest");
     assert.equal(receiver.aggregate(), "working");
+    await deliver(receiver.paths.B, "PostModelRequest");
+    assert.equal(activityStatus(companionView().status).state, "no-active-sessions");
+    await deliver(receiver.paths.B, "SessionEnd");
+    assert.equal(activityStatus(companionView().status).state, "disconnected");
+    await panel.webContents.executeJavaScript("document.querySelector('#stop-activity').click()");
+    await until(() => !activityReceiver && !activityStopping, "Settings stopped the receiver");
+    assert.ok(Object.values(receiver.paths).every((folder) => !existsSync(join(folder, ".codex", "hooks.json"))));
   } finally {
     activityReceiver = undefined;
     assert.equal(await receiver.close(), true);
+    panel.close();
   }
   console.log("Desktop activity ingress, concurrent synthetic hook commands, and renderer passed.");
 }
@@ -300,7 +411,9 @@ function hitTest() {
     const scale = petScales[preferences.petSize];
     const x = Math.abs(cursor.x - (bounds.x + bounds.width / 2));
     const y = Math.abs(cursor.y - (bounds.y + bounds.height / 2));
-    inside = preferences.mode === "pet" ? x <= 40 * scale + (preferences.roaming ? 28 : 6) && y <= 32 * scale + 16
+    const petY = Math.abs(cursor.y - (bounds.y + (bounds.height - 25) / 2));
+    const inToolbar = hovered && x <= 42 && cursor.y >= bounds.y + bounds.height - 30 && cursor.y < bounds.y + bounds.height;
+    inside = preferences.mode === "pet" ? (x <= 40 * scale + (preferences.roaming ? 28 : 6) && petY <= 32 * scale + 12) || inToolbar
       : x <= bounds.width / 2 && y <= bounds.height / 2;
     if (preferences.mode === "pet") ignore ||= !inside;
   }
@@ -316,12 +429,12 @@ function updateHitTesting() {
 
 function chooseShortcut(shortcut) {
   if (shortcut && !globalShortcut.isRegistered(shortcut) && !globalShortcut.register(shortcut, toggleVisible)) {
-    dialog.showErrorBox("Pawmetry shortcut", "That shortcut is unavailable. Choose a different shortcut in the tray settings.");
-    return;
+    return false;
   }
   if (preferences.shortcut && preferences.shortcut !== shortcut) globalShortcut.unregister(preferences.shortcut);
   preferences.shortcut = shortcut;
   persist();
+  return true;
 }
 
 function selectMode(mode) {
@@ -352,58 +465,96 @@ function selectSize(size) {
   resize(...dimensions[preferences.mode][size]);
 }
 
-function choice(label, values, current, format, select) {
-  return { label, submenu: values.map((value) => ({ label: format(value), type: "radio", checked: current === value,
-    click: () => { select(value); persist(); paint(); } })) };
+function applyAlwaysOnTop() {
+  const visibleSettings = settings.window?.isVisible() && !settings.window.isMinimized();
+  if (window && !window.isDestroyed()) window.setAlwaysOnTop(preferences.alwaysOnTop && !visibleSettings);
 }
 
-function openSettings() {
-  const title = (value) => value[0].toUpperCase() + value.slice(1);
-  const alerts = { lowEnergy: "Low energy", lowStamina: "Low stamina", restoredEnergy: "Energy restored",
-    restoredStamina: "Stamina restored", exhaustion: "Allowance at zero" };
-  const toggle = (label, key) => ({ label, type: "checkbox", checked: preferences[key], click: (item) => {
-    preferences[key] = item.checked;
-    if (key === "hoverInfo") updateHitTesting();
-    persist();
+function setClickThrough(enabled) {
+  preferences.clickThrough = enabled;
+  if (clickThroughItem) clickThroughItem.checked = enabled;
+  updateHitTesting();
+  persist();
+  paint();
+}
+
+function setLiveQuota(enabled) {
+  liveSelected = enabled;
+  if (controlMenu) controlMenu.getMenuItemById("live-quota").checked = enabled;
+  if (enabled && !monitoringPaused) live.enable();
+  else { void live.disable(); notice = undefined; scenarioAt = Date.now(); }
+  paint();
+}
+
+async function openSettings() {
+  try { const opened = await settings.open(); paint(); return opened; }
+  catch (error) {
+    if (smoke) { console.error(error); return; }
+    dialog.showErrorBox("Pawmetry Settings", "The Settings window could not open. Restart Pawmetry and try again.");
+  }
+}
+
+function changeSetting(key, value) {
+  if (!validSetting(key, value, screen.getAllDisplays().map(({ id }) => id))) return "Invalid setting.";
+  if (key === "mode") selectMode(value);
+  else if (key === "windowSize") selectSize(value);
+  else if (key === "monitor") selectMonitor(screen.getAllDisplays().find(({ id }) => id === value));
+  else if (key === "shortcut") { if (!chooseShortcut(value)) return "This shortcut is unavailable. The previous choice is still active."; }
+  else if (key === "clickThrough") setClickThrough(value);
+  else if (key === "energyThreshold" || key === "staminaThreshold") preferences.lowThresholds[key === "energyThreshold" ? "energy" : "stamina"] = value;
+  else if (key.startsWith("alert-")) preferences.alerts[key.slice(6)] = value;
+  else preferences[key] = value;
+  if (key === "alwaysOnTop") applyAlwaysOnTop();
+  if (key === "hoverInfo" || key === "roaming" || key === "petSize") updateHitTesting();
+  persist();
+  paint();
+  return savePreferences(preferencePath, preferences) ? "" : "Changed for this run. Pawmetry could not save the preference to disk.";
+}
+
+function command(op) {
+  switch (op) {
+    case "refresh": live.refresh(true); break;
+    case "show": recover(); break;
+    case "hide": setVisible(false); break;
+    case "pause-monitoring": case "resume-monitoring": pauseMonitoring(op === "pause-monitoring"); break;
+    case "pause-animation": case "resume-animation": pauseAnimation(op === "pause-animation"); break;
+    case "settings": void openSettings(); break;
+    case "quit": setTimeout(() => app.quit(), 150); break;
+    case "toggle-top": changeSetting("alwaysOnTop", !preferences.alwaysOnTop); break;
+    case "toggle-animation": pauseAnimation(!paused); break;
+    case "display-next": changeSetting("mode", modes[(modes.indexOf(preferences.mode) + 1) % modes.length]); break;
+    case "more": if (window?.isVisible()) controlMenu?.popup({ window }); break;
+  }
+}
+
+function connectRendererIpc() {
+  const fromSettings = (event) => isLocalSender(event, settings.window, settingsUrl);
+  ipcMain.handle("pawmetry:control", (event, op) => {
+    if (isLocalSender(event, window, petUrl) && ["settings", "hide", "toggle-top", "toggle-animation", "display-next", "refresh", "more"].includes(op)) command(op);
+  });
+  ipcMain.handle("pawmetry:settings-read", (event) => fromSettings(event) ? settingsState() : null);
+  ipcMain.handle("pawmetry:settings-update", (event, key, value) => fromSettings(event) ? changeSetting(key, value) : "Settings command denied.");
+  ipcMain.handle("pawmetry:settings-action", async (event, action) => {
+    if (!fromSettings(event)) return null;
+    switch (action) {
+      case "start-activity": case "stop-activity": await setActivity(action === "start-activity"); break;
+      case "check-hooks": {
+        const receiver = activityReceiver;
+        if (!receiver) break;
+        const checked = await receiver.checkConfigurations();
+        if (receiver === activityReceiver) activityChecks = checked;
+        break;
+      }
+      case "copy-A": case "copy-B": if (activityReceiver) clipboard.writeText(activityReceiver.paths[action === "copy-A" ? "A" : "B"]); break;
+      case "live-quota": case "simulate-quota": setLiveQuota(action === "live-quota"); break;
+      case "pause-monitoring": case "resume-monitoring": case "refresh": command(action); break;
+      case "test-notice": notify("Pawmetry test notification", Object.values(preferences.alerts).includes("sound"), true); break;
+      case "start-at-login": case "remove-at-login": if (app.isPackaged && process.platform === "win32") await chooseStartup(action === "start-at-login"); break;
+      default: return null;
+    }
     paint();
-  } });
-  settingsMenu = Menu.buildFromTemplate([
-    choice("Display mode", modes, preferences.mode, title, selectMode),
-    choice("Window size", sizes, preferences.windowSizes[preferences.mode], title, selectSize),
-    choice("Pet size", sizes, preferences.petSize, title, (value) => { preferences.petSize = value; }),
-    choice("Background opacity", [0, 0.5, 0.8, 1], preferences.backgroundOpacity, (n) => `${n * 100}%`,
-      (value) => { preferences.backgroundOpacity = value; }),
-    choice("Pet opacity", [0.5, 0.75, 1], preferences.petOpacity, (n) => `${n * 100}%`, (value) => { preferences.petOpacity = value; }),
-    choice("Animation speed", [0.5, 1, 1.5, 2], preferences.speed, (n) => `${n}×`, (value) => { preferences.speed = value; }),
-    toggle("Energy bar", "energyBar"), toggle("Stamina bar", "staminaBar"), toggle("Information on hover", "hoverInfo"),
-    toggle("Roam within the window", "roaming"), toggle("Reduced motion", "reducedMotion"),
-    { label: "Always on top", type: "checkbox", checked: preferences.alwaysOnTop, click: (item) => {
-      preferences.alwaysOnTop = item.checked;
-      window.setAlwaysOnTop(item.checked);
-      persist();
-    } },
-    { label: "Monitor", submenu: [
-      { label: "Follow the pet", type: "radio", checked: preferences.monitor === null, click: () => selectMonitor(null) },
-      ...screen.getAllDisplays().map((display, i) => ({ label: `Display ${i + 1}${display.label ? ` · ${display.label}` : ""}`,
-        type: "radio", checked: preferences.monitor === display.id, click: () => selectMonitor(display) })),
-    ] },
-    choice("Global show/hide shortcut", [null, ...shortcuts], preferences.shortcut, (value) => value ?? "Off", chooseShortcut),
-    ...(app.isPackaged && process.platform === "win32" ? [{ label: "Windows startup", submenu: [
-      { label: "Enable at sign-in…", click: () => { void chooseStartup(true); } },
-      { label: "Remove from startup…", click: () => { void chooseStartup(false); } },
-    ] }] : []),
-    { label: "Notifications", submenu: [
-      ...alertKinds.map((kind) => choice(alerts[kind], ["off", "silent", "sound"], preferences.alerts[kind], title,
-        (value) => { preferences.alerts[kind] = value; })),
-      ...["energy", "stamina"].map((meter) => choice(`${title(meter)} threshold`, [10, 20, 30, 40, 50],
-        preferences.lowThresholds[meter], (n) => `${n}%`, (value) => { preferences.lowThresholds[meter] = value; })),
-      toggle("Quiet hours (10 pm to 7 am local time)", "quietHours"),
-      { label: "Test notification", click: () => notify("Pawmetry test notification", Object.values(preferences.alerts).includes("sound"), true) },
-    ] },
-  ]);
-  // A hidden presentation has no native menu owner. Show it so settings remain reachable.
-  if (!window.isVisible()) recover();
-  settingsMenu.popup({ window });
+    return settingsState();
+  });
 }
 
 function persist() {
@@ -436,18 +587,14 @@ async function start() {
   const [width, height] = dimensions[preferences.mode][preferences.windowSizes[preferences.mode]];
   const wanted = { x: workArea.x + workArea.width - width - 20, y: workArea.y + 24, ...preferences.bounds, width, height };
   const initial = fitBounds(wanted, selected?.workArea ?? screen.getDisplayMatching(wanted).workArea);
-  window = new BrowserWindow({
+  window = localWindow({
     ...initial,
     transparent: true, frame: false, alwaysOnTop: preferences.alwaysOnTop, skipTaskbar: true, resizable: false, show: false,
-    webPreferences: { preload: local("preload.cjs"), contextIsolation: true, sandbox: true, nodeIntegration: false,
-      partition: "pawmetry-simulation", backgroundThrottling: !smoke },
-  });
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event) => event.preventDefault());
-  window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-  window.webContents.session.setPermissionCheckHandler(() => false);
-  window.webContents.session.webRequest.onBeforeRequest({ urls: ["http://*/*", "https://*/*"] },
-    (_details, callback) => callback({ cancel: true }));
+  }, local("preload.cjs"), !smoke);
+  connectRendererIpc();
+  const menu = buildControlMenu();
+  window.webContents.on("context-menu", () => command("more"));
+  window.on("system-context-menu", (event) => { event.preventDefault(); command("more"); });
   await window.loadFile(local("index.html"));
   paint();
   if (restoreSmoke) {
@@ -491,6 +638,7 @@ async function start() {
     assert.deepEqual(window.getSize(), [...dimensions.dashboard.small]);
     savePreferences(preferencePath, preferences);
     console.log("Desktop bidirectional native sizing, renderer sizing, and saved bounds passed.");
+    await smokeControls(menu);
     if (process.platform === "win32") await smokeActivity();
     paint();
     const check = await window.webContents.executeJavaScript(`new Promise((resolve) => {
@@ -509,44 +657,13 @@ async function start() {
   endpointTask = performanceSmoke ? Promise.resolve(null) : startEndpoint().catch(() => null);
   tray = new Tray(trayIcon());
   tray.setToolTip("Pawmetry");
-  const menu = controlMenu = Menu.buildFromTemplate([
-    { label: "Show or hide", click: toggleVisible },
-    { label: "Live Codex quota", type: "checkbox", click: (item) => {
-      liveSelected = item.checked;
-      if (item.checked && !monitoringPaused) live.enable();
-      else { live.disable(); notice = undefined; scenarioAt = Date.now(); }
-      paint();
-    } },
-    { label: "Refresh live quota", click: () => live.refresh(true) },
-    { label: "Start or stop disposable Codex activity", enabled: process.platform === "win32", click: toggleActivity },
-    { id: "animation-pause", label: "Pause animations", type: "checkbox", click: (item) => pauseAnimation(item.checked) },
-    { id: "monitoring-pause", label: "Pause monitoring", type: "checkbox", click: (item) => pauseMonitoring(item.checked) },
-    { label: "Settings", click: openSettings },
-    { label: "Next scenario", click: advance },
-    { id: "click-through", label: "Click-through", type: "checkbox", checked: preferences.clickThrough, click: (item) => {
-      preferences.clickThrough = item.checked;
-      hitTest();
-      persist();
-    } },
-    { type: "separator" },
-    { label: "Quit", click: () => app.quit() },
-  ]);
-  clickThroughItem = menu.getMenuItemById("click-through");
   tray.setContextMenu(menu);
   tray.on("double-click", recover);
-  const petMenu = () => {
-    menu.getMenuItemById("animation-pause").checked = paused;
-    menu.getMenuItemById("monitoring-pause").checked = monitoringPaused;
-    menu.popup({ window });
-  };
-  window.webContents.on("context-menu", petMenu);
-  window.on("system-context-menu", (event) => { event.preventDefault(); petMenu(); });
   window.on("move", persist);
   window.on("resize", persist);
-  screen.on("display-removed", keepOnDisplay);
-  screen.on("display-metrics-changed", keepOnDisplay);
+  for (const event of ["display-removed", "display-metrics-changed"]) screen.on(event, () => { keepOnDisplay(); settings.recover(); paint(); });
   powerMonitor.on("resume", () => { wakeAt = Date.now() + 2000; });
-  if (preferences.shortcut) chooseShortcut(preferences.shortcut);
+  if (preferences.shortcut && !chooseShortcut(preferences.shortcut)) preferences.shortcut = null;
   if (!performanceSmoke && !preferences.hidden) window.showInactive();
   updateHitTesting();
   let lastScenario = Date.now();
@@ -554,7 +671,7 @@ async function start() {
     if (wakeAt && Date.now() >= wakeAt && (!liveSelected || monitoringPaused || live.refresh(true))) wakeAt = 0;
     if (!wakeAt) live.refresh();
     checkNotices();
-    if (!window.isVisible()) return;
+    if (!window.isVisible()) { if (settings.window?.isVisible()) paint(); return; }
     if (!paused && Date.now() - lastScenario >= 4500) {
       lastScenario = Date.now();
       advance();
@@ -572,6 +689,25 @@ async function start() {
     console.log(JSON.stringify({ hiddenSimulation: true, samples }));
     app.quit();
   }
+}
+
+function buildControlMenu() {
+  controlMenu = Menu.buildFromTemplate([
+    { label: "Show or hide pet", click: toggleVisible },
+    { id: "settings", label: "Settings", click: () => command("settings") },
+    { id: "live-quota", label: "Live Codex quota", type: "checkbox", click: (item) => setLiveQuota(item.checked) },
+    { label: "Refresh live quota", click: () => command("refresh") },
+    { label: "Display mode", submenu: modes.map((value) => ({ label: value === "pet" ? "Pet only" : value === "compact" ? "Compact" : "Dashboard",
+      click: () => changeSetting("mode", value) })) },
+    { id: "animation-pause", label: "Pause animations", type: "checkbox", click: (item) => pauseAnimation(item.checked) },
+    { id: "monitoring-pause", label: "Pause monitoring", type: "checkbox", click: (item) => pauseMonitoring(item.checked) },
+    { label: "Next scenario", click: advance },
+    { id: "click-through", label: "Click-through", type: "checkbox", checked: preferences.clickThrough, click: (item) => setClickThrough(item.checked) },
+    { type: "separator" },
+    { label: "Exit Pawmetry", click: () => command("quit") },
+  ]);
+  clickThroughItem = controlMenu.getMenuItemById("click-through");
+  return controlMenu;
 }
 
 function recover() {
@@ -632,7 +768,7 @@ if (lockSmoke) {
       await windowsEndpoint("clear", server.endpoint).catch(() => {});
     });
     const stoppingActivity = Promise.resolve(activityTask ?? activityReceiver).then((receiver) => receiver?.close());
-    void Promise.allSettled([stopping, closingEndpoint, stoppingActivity]).then(() => app.quit());
+    void Promise.allSettled([stopping, closingEndpoint, stoppingActivity, activityStopping]).then(() => app.quit());
   });
   app.on("will-quit", () => { clearInterval(timer); clearInterval(hitTimer); globalShortcut.unregisterAll(); tray?.destroy(); });
   start().catch((error) => {

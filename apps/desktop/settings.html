@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+<title>Pawmetry Settings</title>
+<link rel="stylesheet" href="./settings.css">
+<main>
+  <header>
+    <h1>Pawmetry Settings</h1>
+    <nav aria-label="Settings sections"><a href="#connection">Connection</a><a href="#appearance">Appearance</a><a href="#notifications">Notifications</a></nav>
+    <p id="settings-error" role="status"></p>
+  </header>
+  <section id="connection" aria-labelledby="connection-title">
+    <h2 id="connection-title">Codex connection</h2>
+    <div class="panel">
+      <h3>Account quota</h3>
+      <p id="quota-state" class="state" role="status">Checking</p>
+      <p>Energy, stamina and resets come from the account quota reader. Quota works independently of activity.</p>
+      <div class="actions"><button id="toggle-quota" type="button">Enable live quota</button><button data-action="refresh" type="button">Refresh quota</button></div>
+    </div>
+    <div class="panel">
+      <h3>Project activity</h3>
+      <p id="activity-state" class="state" role="status">Checking</p>
+      <p id="activity-detail"></p>
+      <p id="activity-issue" role="status"></p>
+      <div class="actions">
+        <button id="start-activity" data-action="start-activity" type="button">Create two disposable workspaces</button>
+        <button id="check-hooks" data-action="check-hooks" type="button" hidden>Check hook files</button>
+        <button id="stop-activity" data-action="stop-activity" type="button" hidden>Disconnect and remove disposable hooks</button>
+      </div>
+      <div id="workspace-instructions" hidden>
+        <ol>
+          <li>Copy each folder path and open it in its own local VS Code window.</li>
+          <li>Review the generated <code>.codex/hooks.json</code> and approve those exact definitions in Codex’s native hook review if you agree. Pawmetry cannot read the IDE’s approval decision.</li>
+          <li>Try a model-only turn or a benign tool action in the disposable workspace. Return here to see whether an event arrived.</li>
+        </ol>
+        <div id="workspaces"></div>
+      </div>
+      <p id="retained-paths"></p>
+    </div>
+    <button id="toggle-monitoring" type="button">Pause monitoring</button>
+  </section>
+  <section id="appearance" aria-labelledby="appearance-title">
+    <h2 id="appearance-title">Appearance and controls</h2>
+    <div class="settings-grid" id="appearance-fields"></div>
+  </section>
+  <section id="notifications" aria-labelledby="notifications-title">
+    <h2 id="notifications-title">Notifications</h2>
+    <div class="settings-grid" id="notification-fields"></div>
+    <div class="actions"><button data-action="test-notice" type="button">Test notification</button></div>
+  </section>
+  <section id="startup" aria-labelledby="startup-title" hidden>
+    <h2 id="startup-title">Windows startup</h2>
+    <div class="actions"><button data-action="start-at-login" type="button">Enable at sign-in…</button><button data-action="remove-at-login" type="button">Remove from startup…</button></div>
+  </section>
+</main>
+<script src="./settings.js"></script>
+</html>

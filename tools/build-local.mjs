@@ -33,6 +33,8 @@ await copy([
   "apps/desktop/index.html", "apps/desktop/live-quota.ts", "apps/desktop/main.mjs",
   "apps/desktop/preferences.ts", "apps/desktop/preload.cjs", "apps/desktop/quota-alerts.ts",
   "apps/desktop/renderer.js", "apps/desktop/style.css", "packages/animation/animation.ts",
+  "apps/desktop/local-window.mjs", "apps/desktop/settings-window.mjs", "apps/desktop/settings-model.ts",
+  "apps/desktop/settings-preload.cjs", "apps/desktop/settings.html", "apps/desktop/settings.js", "apps/desktop/settings.css",
   "packages/telemetry/quota-manager.ts", "tools/codex-quota-probe/app-server.ts",
   "tools/codex-quota-probe/discovery.ts", "tools/codex-quota-probe/quota.ts", "tools/codex-quota-probe/telemetry.ts",
   "tools/codex-activity-probe/hook.ts", "tools/codex-activity-probe/protocol.ts",

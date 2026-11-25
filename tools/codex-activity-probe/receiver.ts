@@ -32,23 +32,33 @@ export async function prepareReceiver({ electron = false, onChange = () => {}, o
   let paused = false;
   let resumedAt = 0;
   const created = new Map<string, string>();
+  const latest = new Map<"A" | "B", { at: number; event: string }>();
+  const seen = new Set<"A" | "B">();
   let active = false;
   let closing: Promise<boolean> | undefined;
+  const directory = async (path: string) => {
+    const info = await lstat(path);
+    return info.isDirectory() && !info.isSymbolicLink();
+  };
+  const configuration = async (file: string, expected: string) => {
+    try {
+      if (!await directory(root) || !await directory(dirname(dirname(file))) || !await directory(dirname(file))) return "changed";
+      const info = await lstat(file);
+      return info.isFile() && !info.isSymbolicLink() && info.size === Buffer.byteLength(expected)
+        && await readFile(file, "utf8") === expected ? "present" : "changed";
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unavailable";
+    }
+  };
   const close = () => closing ??= (async () => {
     if (active) await new Promise<void>((resolve) => socket.close(() => resolve()));
     let clean = true;
-    const directory = async (path: string) => {
-      const info = await lstat(path);
-      return info.isDirectory() && !info.isSymbolicLink();
-    };
     // Remove only unchanged files produced for this run. Leave workspace content alone.
     for (const [file, expected] of created) {
       try {
-        const info = await lstat(file);
-        if (await directory(root) && await directory(dirname(dirname(file))) && await directory(dirname(file))
-          && info.isFile() && !info.isSymbolicLink() && info.size === Buffer.byteLength(expected)
-          && await readFile(file, "utf8") === expected) await unlink(file);
-        else clean = false;
+        const check = await configuration(file, expected);
+        if (check === "present") await unlink(file);
+        else if (check !== "missing") clean = false;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") clean = false;
       }
@@ -74,7 +84,11 @@ export async function prepareReceiver({ electron = false, onChange = () => {}, o
       if (closing || paused || remote.address !== "127.0.0.1") return;
       const now = Date.now();
       const observed = acceptObservation(message, keys, now);
-      if (observed && observed.sentAt >= resumedAt && timeline.observe(observed, now)) onChange();
+      if (observed && observed.sentAt >= resumedAt && timeline.observe(observed, now)) {
+        latest.set(observed.workspace, { at: now, event: observed.event });
+        seen.add(observed.workspace);
+        onChange();
+      }
     });
     const port = socket.address().port;
     for (const label of labels) {
@@ -86,10 +100,21 @@ export async function prepareReceiver({ electron = false, onChange = () => {}, o
       created.set(file, config);
     }
     return { paths, close, states: (now = Date.now()) => timeline.states(now), aggregate: (now = Date.now()) => timeline.aggregate(now),
+      async checkConfigurations() {
+        return Object.fromEntries(await Promise.all(labels.map(async (label) => {
+          const file = join(paths[label], ".codex", "hooks.json");
+          return [label, await configuration(file, created.get(file)!)];
+        })));
+      },
+      diagnostics(now = Date.now()) {
+        const states = timeline.states(now);
+        return labels.map((label) => ({ label, path: paths[label], seen: seen.has(label), last: latest.get(label) ?? null,
+          states: states.filter((entry) => entry.workspace === label).map((entry) => entry.state) }));
+      },
       setPaused(value: boolean) {
         if (paused === value) return;
         paused = value;
-        if (paused) timeline = new HookTimeline();
+        if (paused) { timeline = new HookTimeline(); latest.clear(); }
         else resumedAt = Date.now();
       },
     };

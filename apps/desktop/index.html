@@ -7,6 +7,15 @@
 <link rel="stylesheet" href="./style.css">
 <main class="card">
   <header><strong>Pawmetry</strong><span id="mode">Simulation</span></header>
+  <nav class="commands" aria-label="Companion controls">
+    <button type="button" data-command="settings" title="Open Settings" aria-label="Open Settings">⚙</button>
+    <button type="button" data-command="hide" title="Hide to tray" aria-label="Hide to tray">−</button>
+    <button type="button" data-command="toggle-top" title="Always on top" aria-label="Always on top" aria-pressed="true">↑</button>
+    <button type="button" data-command="toggle-animation" title="Pause animations" aria-label="Pause animations" aria-pressed="false">Ⅱ</button>
+    <button type="button" data-command="display-next" title="Switch display mode" aria-label="Switch display mode">▣</button>
+    <button type="button" data-command="refresh" title="Refresh live quota" aria-label="Refresh live quota">↻</button>
+    <button type="button" data-command="more" title="More options" aria-label="More options" aria-haspopup="menu">⋯</button>
+  </nav>
   <div class="stage" aria-hidden="true"><div class="pet-position"><div class="placeholder"><i></i><i></i></div></div></div>
   <p id="pose" role="status">Starting</p>
   <small id="activity" aria-live="polite"></small>

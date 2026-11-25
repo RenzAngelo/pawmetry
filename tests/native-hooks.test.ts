@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { discoverCodex } from "../tools/codex-quota-probe/discovery.ts";
 import { hookConfig } from "../tools/codex-activity-probe/receiver.ts";
 
-test("native Codex lists project hooks and notices cleanup without trusting or executing a hook",
+test("native Codex discovers independent disposable workspace hooks without approving or running them",
   { skip: process.platform !== "win32" || process.env.PAWMETRY_NATIVE_HOOKS_TEST !== "1", timeout: 20_000 },
   async () => {
     const installed = await discoverCodex();
@@ -17,20 +17,20 @@ test("native Codex lists project hooks and notices cleanup without trusting or e
     if (installed.status !== "found") return;
     const root = await mkdtemp(join(tmpdir(), "pawmetry-native-hooks-"));
     const profile = join(root, "profile");
-    const cwd = join(root, "project");
-    const folder = join(cwd, ".codex");
+    const workspaces = [join(root, "workspace-a"), join(root, "workspace-b")];
+    const files = workspaces.map((cwd) => join(cwd, ".codex", "hooks.json"));
     try {
       await mkdir(profile);
-      await mkdir(folder, { recursive: true });
-      await writeFile(join(profile, "config.toml"),
-        "[projects." + JSON.stringify(cwd) + ']\ntrust_level="trusted"\n[analytics]\nenabled=false\n');
+      for (const cwd of workspaces) await mkdir(join(cwd, ".codex"), { recursive: true });
+      await writeFile(join(profile, "config.toml"), workspaces.map((cwd) =>
+        "[projects." + JSON.stringify(cwd) + ']\ntrust_level="trusted"\n').join("\n") + "[analytics]\nenabled=false\n");
       const env: NodeJS.ProcessEnv = { CODEX_HOME: profile };
       for (const name of ["SystemRoot", "WINDIR", "USERPROFILE", "TEMP", "TMP", "LOCALAPPDATA", "HOMEDRIVE", "HOMEPATH"]) {
         env[name] = process.env[name];
       }
       const child = spawn(installed.executable, ["app-server", "--listen", "stdio://", "-c",
         'cli_auth_credentials_store="file"', "-c", "features.apps=false"],
-        { cwd, env, windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
+        { cwd: workspaces[0], env, windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
       const closed = once(child, "close");
       const deadline = setTimeout(() => child.kill(), 15_000);
       child.stdin.on("error", () => {});
@@ -50,25 +50,30 @@ test("native Codex lists project hooks and notices cleanup without trusting or e
         }
       };
       const list = async () => {
-        const { data } = await request("hooks/list", { cwds: [cwd] });
-        assert.equal(data[0].errors.length, 0);
-        return data[0].hooks.filter((hook: { source: string }) => hook.source === "project");
+        const { data } = await request("hooks/list", { cwds: workspaces });
+        assert.equal(data.length, 2);
+        return data.map((entry: { errors: unknown[]; hooks: Array<{ source: string; eventName: string; trustStatus: string }> }) => {
+          assert.equal(entry.errors.length, 0);
+          return entry.hooks.filter((hook) => hook.source === "project");
+        });
       };
       try {
         await request("initialize", {
           clientInfo: { name: "pawmetry_hook_test", version: "0.1.0" }, capabilities: { experimentalApi: true },
         });
         send({ method: "initialized" });
-        assert.equal((await list()).length, 0);
-        const file = join(folder, "hooks.json");
-        const config = hookConfig(process.execPath, 12345, "a".repeat(64), "A", false);
-        await writeFile(file, config, { flag: "wx" });
-        const hooks = await list();
-        const names = Object.keys(JSON.parse(config).hooks).map((name) => name[0].toLowerCase() + name.slice(1));
-        assert.deepEqual(hooks.map((hook: { eventName: string }) => hook.eventName).sort(), names.sort());
-        assert.ok(hooks.every((hook: { trustStatus: string }) => hook.trustStatus === "untrusted"));
-        await unlink(file);
-        assert.equal((await list()).length, 0);
+        assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 0]);
+        const configs = (["A", "B"] as const).map((label) => hookConfig(process.execPath, 12345, label.toLowerCase().repeat(64), label, false));
+        await Promise.all(configs.map((config, index) => writeFile(files[index], config, { flag: "wx" })));
+        for (const hooks of await list()) {
+          const names = Object.keys(JSON.parse(configs[0]).hooks).map((name) => name[0].toLowerCase() + name.slice(1));
+          assert.deepEqual(hooks.map((hook: { eventName: string }) => hook.eventName).sort(), names.sort());
+          assert.ok(hooks.every((hook: { trustStatus: string }) => hook.trustStatus === "untrusted"));
+        }
+        await unlink(files[0]);
+        assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 8]);
+        await unlink(files[1]);
+        assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 0]);
       } finally {
         child.stdin.end();
         await closed;

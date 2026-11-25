@@ -6,7 +6,14 @@ body { margin: 0; padding: 10px; overflow: hidden; }
 .card { position: relative; }
 header, .metric { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 header span { color: #a9e6ca; font-size: 12px; }
-.stage { display: grid; height: clamp(80px, calc(100vh - 206px), 170px); place-items: center; }
+.commands { display: flex; justify-content: center; gap: 3px; margin-top: 4px; -webkit-app-region: no-drag; }
+.commands button { display: grid; place-items: center; padding: 0; width: 24px; height: 24px; font: 15px "Segoe UI Symbol", sans-serif;
+  color: #edf6f2; border: 1px solid #4b6465; border-radius: 5px; background: #263940; cursor: pointer; -webkit-app-region: no-drag; }
+.commands button[aria-pressed="true"] { border-color: #9ce0c2; color: #b9f0d7; }
+.commands button:disabled { opacity: .5; cursor: default; }
+.commands button:hover:not(:disabled) { background: #375253; }
+.commands button:focus-visible { outline: 2px solid #9ce0c2; outline-offset: 1px; }
+.stage { display: grid; height: clamp(80px, calc(100vh - 236px), 150px); place-items: center; }
 .pet-position { opacity: var(--pet-alpha, 1); }
 .placeholder { display: flex; justify-content: center; align-items: center; gap: 18px; width: var(--sprite-width, 78px); height: var(--sprite-height, 64px);
   background: #87d5b1; border: 4px solid #abdcc8; border-radius: 16px; transform: translateY(2px); }
@@ -23,7 +30,7 @@ body[data-pose="sleeping"] .placeholder i { height: 3px; }
 body[data-pose="unknown"] .placeholder, body[data-pose="disconnected"] .placeholder { background: #829196; border-color: #acb5b8; }
 #pose { margin: 0; text-align: center; font-weight: 600; }
 #activity { text-align: center; }
-#quota-notice { position: absolute; top: 36px; left: 17px; right: 17px; margin: 0; padding: 6px 8px; border-radius: 6px;
+#quota-notice { position: absolute; top: 65px; left: 17px; right: 17px; margin: 0; padding: 6px 8px; border-radius: 6px; pointer-events: none;
   color: #fff0cd; background: #53391c; text-align: center; font-size: 12px; }
 #quota-notice:empty { display: none; }
 .metric { font-size: 13px; margin-top: 10px; }
@@ -31,16 +38,17 @@ body[data-pose="unknown"] .placeholder, body[data-pose="disconnected"] .placehol
 .metric meter { flex: 1; accent-color: #87d5b1; }
 .metric output { min-width: 36px; text-align: right; }
 small { color: #bdcbd1; font-size: 10px; display: block; min-height: 13px; margin: 3px 0 0; }
-body[data-layout="compact"] .stage { height: max(80px, calc(100vh - 164px)); }
+body[data-layout="compact"] .stage { height: clamp(68px, calc(100vh - 184px), 86px); }
+body[data-layout="compact"] .metric { margin-top: 4px; }
 body[data-layout="compact"] .details small { display: none; }
 body[data-layout="pet"] { padding: 0; }
 body[data-layout="pet"] .card { height: 100vh; padding: 0; border: none; background: transparent; -webkit-app-region: no-drag; }
-body[data-layout="pet"] .stage { height: 100%; }
+body[data-layout="pet"] .stage { height: calc(100% - 25px); }
 body[data-layout="pet"] .pet-position { -webkit-app-region: drag; }
-body[data-layout="pet"] .card > :not(.stage, header) { display: none; }
-body[data-layout="pet"] header { position: absolute; inset: auto 0 5px; display: flex; justify-content: center; opacity: 0; pointer-events: none; }
-body[data-layout="pet"][data-hovered="true"] header { opacity: 1; }
-body[data-layout="pet"] header strong { display: none; }
+body[data-layout="pet"] .card > :not(.stage, .commands) { display: none; }
+body[data-layout="pet"] .commands { position: absolute; inset: auto 0 4px; margin: 0; opacity: 0; pointer-events: none; }
+body[data-layout="pet"] .commands button:not([data-command="settings"], [data-command="hide"], [data-command="more"]) { display: none; }
+body[data-layout="pet"][data-hovered="true"] .commands, body[data-layout="pet"] .commands:focus-within { opacity: 1; pointer-events: auto; }
 body[data-hover-info="true"][data-hovered="false"] .card :is(header, #pose, #activity, .details) { opacity: 0; }
 body[data-roaming="true"] .stage { --stride: min(22px, 10vw); }
 body[data-roaming="true"] .pet-position { animation: roam var(--roam-pace, 3000ms) ease-in-out infinite alternate; }

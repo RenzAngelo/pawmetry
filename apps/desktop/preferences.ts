@@ -14,7 +14,7 @@ export const dimensions: Record<DisplayMode, Record<Size, readonly [number, numb
 };
 export const shortcuts = ["CommandOrControl+Alt+Shift+P", "CommandOrControl+Alt+Shift+F10"] as const;
 export type Preferences = AlertSettings & {
-  bounds: Bounds | null; alwaysOnTop: boolean; reducedMotion: boolean;
+  bounds: Bounds | null; settingsBounds: Bounds | null; alwaysOnTop: boolean; reducedMotion: boolean;
   mode: DisplayMode; hidden: boolean; windowSizes: Record<DisplayMode, Size>; petSize: Size;
   backgroundOpacity: number; petOpacity: number; speed: number; monitor: number | null;
   energyBar: boolean; staminaBar: boolean; hoverInfo: boolean; roaming: boolean; clickThrough: boolean;
@@ -22,7 +22,7 @@ export type Preferences = AlertSettings & {
 };
 
 export const defaults: Preferences = {
-  bounds: null, alwaysOnTop: true, reducedMotion: false,
+  bounds: null, settingsBounds: null, alwaysOnTop: true, reducedMotion: false,
   alerts: { lowEnergy: "off", lowStamina: "off", restoredEnergy: "off", restoredStamina: "off", exhaustion: "off" },
   lowThresholds: { energy: 20, stamina: 20 }, quietHours: false,
   mode: "dashboard", hidden: false, windowSizes: { pet: "standard", compact: "standard", dashboard: "standard" },
@@ -30,13 +30,17 @@ export const defaults: Preferences = {
   energyBar: true, staminaBar: true, hoverInfo: false, roaming: false, clickThrough: false, shortcut: null,
 };
 
+function parseBounds(value: unknown, minimum: number, maximum: number): Bounds | null {
+  if (!value || typeof value !== "object") return null;
+  const { x, y, width, height } = value as Partial<Bounds>;
+  const coordinate = (n: unknown): n is number => typeof n === "number" && Number.isSafeInteger(n) && Math.abs(n) <= 100_000;
+  return coordinate(x) && coordinate(y) && coordinate(width) && coordinate(height)
+    && width >= minimum && width <= maximum && height >= minimum && height <= maximum ? { x, y, width, height } : null;
+}
+
 export function preferences(value: unknown): Preferences {
   const source = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
-  const bounds = source.bounds as Partial<Bounds> | null;
-  const coordinate = (n: unknown): n is number => typeof n === "number" && Number.isSafeInteger(n) && Math.abs(n) <= 100_000;
-  const valid = bounds && coordinate(bounds.x) && coordinate(bounds.y) && coordinate(bounds.width)
-    && coordinate(bounds.height) && bounds.width > 0 && bounds.width <= 760 && bounds.height > 0 && bounds.height <= 760;
-  const cleaned = valid ? { x: bounds.x!, y: bounds.y!, width: bounds.width!, height: bounds.height! } : null;
+  const cleaned = parseBounds(source.bounds, 1, 760);
   const size = (value: unknown): Size => value === "small" || value === "large" ? value : "standard";
   const storedSizes = source.windowSizes as Partial<Record<DisplayMode, Size>> | undefined;
   const number = (value: unknown, min: number, max: number, fallback: number) =>
@@ -48,7 +52,8 @@ export function preferences(value: unknown): Preferences {
     else if (source.lowQuotaAlerts === true && (kind === "lowEnergy" || kind === "lowStamina")) alerts[kind] = "silent";
   }
   const thresholds = source.lowThresholds as Partial<Preferences["lowThresholds"]> | undefined;
-  return { bounds: cleaned, alwaysOnTop: source.alwaysOnTop !== false, reducedMotion: source.reducedMotion === true,
+  return { bounds: cleaned, settingsBounds: parseBounds(source.settingsBounds, 200, 10_000),
+    alwaysOnTop: source.alwaysOnTop !== false, reducedMotion: source.reducedMotion === true,
     alerts, lowThresholds: { energy: number(thresholds?.energy, 5, 50, 20), stamina: number(thresholds?.stamina, 5, 50, 20) },
     quietHours: source.quietHours === true,
     mode: source.mode === "pet" || source.mode === "compact" ? source.mode : "dashboard", hidden: source.hidden === true,
@@ -61,6 +66,21 @@ export function preferences(value: unknown): Preferences {
     roaming: source.roaming === true, clickThrough: source.clickThrough === true,
     shortcut: shortcuts.find((item) => item === source.shortcut) ?? null,
   };
+}
+
+export function placeSettings(saved: Bounds | null, fallback: Bounds, areas: Bounds[]): Bounds {
+  let reachable: Bounds | undefined;
+  let best = 0;
+  if (saved) for (const area of areas) {
+    const width = Math.min(area.x + area.width, saved.x + saved.width) - Math.max(area.x, saved.x);
+    const height = Math.min(area.y + area.height, saved.y + saved.height) - Math.max(area.y, saved.y);
+    if (width >= 64 && height >= 64 && width * height > best) { reachable = area; best = width * height; }
+  }
+  if (saved && reachable) return fitBounds(saved, reachable);
+  const width = Math.min(saved?.width ?? 680, fallback.width);
+  const height = Math.min(saved?.height ?? 720, fallback.height);
+  return { width, height, x: fallback.x + Math.round((fallback.width - width) / 2),
+    y: fallback.y + Math.round((fallback.height - height) / 2) };
 }
 
 export function fitBounds(bounds: Bounds, area: Bounds): Bounds {
@@ -81,12 +101,14 @@ export function loadPreferences(path: string): Preferences {
   return preferences({});
 }
 
-export function savePreferences(path: string, value: Preferences): void {
+export function savePreferences(path: string, value: Preferences): boolean {
   const temporary = path + "." + randomBytes(8).toString("hex") + ".tmp";
   try {
     writeFileSync(temporary, JSON.stringify(preferences(value)), { flag: "wx" });
     renameSync(temporary, path);
+    return true;
   } catch {
     try { unlinkSync(temporary); } catch { /* No temporary file remains. */ }
+    return false;
   }
 }
