@@ -29,12 +29,14 @@ Never collect prompts, source code, transcripts, conversation text, tool inputs 
 | Boundary | Controls |
 | --- | --- |
 | Desktop renderer → main | Local packaged resources, restrictive CSP, context isolation, renderer sandbox and Node integration disabled. Deny unexpected navigations, windows and permission requests. Expose typed preload functions and validate sender, frame and schema |
-| VS Code host or hook → desktop | Current user and logon session ACL with remote clients rejected. Validate version, framing, sizes, rates, role and payload. Separate publishing from control. Reject arbitrary commands, paths, process launch, provider RPC forwarding and file access |
+| VS Code host → desktop | The listener binds IPv4 loopback. The Windows helper creates and verifies a current-user-owned descriptor with a DACL granting access only to the current logon SID. Both peers prove possession of the per-run capability using fresh nonces. Each connection admits one bounded, versioned request for status or a throttled refresh. Activity publishing and arbitrary commands have no protocol route |
 | Desktop → provider process | Explicit user-selected or verified supported executable and fixed stdio arguments without a shell. Allowlist the quota RPC, cap output and time, supervise only processes Pawmetry owns and fail closed on unexpected messages. Review startup configuration effects and do not collect provider debug output |
 | Workspace and assets | Gate sensitive extension commands at execution with Workspace Trust. Use original static assets in the MVP. Future custom packs require bounded image/manifest parsing with no scripts or external resources |
 | CI and packages | Pin reviewed dependencies and actions, scan lockfile changes, use least-privilege build workflows and keep signing credentials out of PR builds. Verify the contents of both packages before distribution |
 
 Processes already executing as the same Windows user can interfere with that user's apps. Treat endpoint checks, role separation and rejection of unsupported commands as defense in depth. Test rights and failure behavior explicitly. [Electron security](https://www.electronjs.org/docs/latest/tutorial/security) · [Windows pipe ACLs](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights) · [VS Code Workspace Trust](https://code.visualstudio.com/api/extension-guides/workspace-trust) · [GitHub Actions security](https://docs.github.com/en/actions/reference/security/secure-use)
+
+The IPC capability is generated locally and is unrelated to Codex credentials. The descriptor is restricted to Local AppData on a fixed drive, rejects redirected paths and broad ACLs, and is replaced on desktop restart. Clients cache it in memory and re-discover it after failure. Same-logon processes are inside the credential boundary. The native test verifies the actual descriptor ACL, with multi-user isolation still pending manual QA.
 
 ## Vulnerability reports
 

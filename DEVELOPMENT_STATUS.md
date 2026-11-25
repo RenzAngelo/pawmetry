@@ -7,6 +7,7 @@
 - The installed native Codex App Server discovered a disposable project `PreToolUse` hook using `hooks/list` in an empty profile. It reported project source and untrusted status with zero errors. No provider turn ran.
 - The activity probe projects only tool-start and run-scoped session observations. A loopback test with two independent hook processes verified output minimization and distinct session correlation using synthetic inputs.
 - The provider-neutral quota manager and session registry are implemented in memory. The 37-test suite passed, covering shared scopes, refresh coalescing and expiry, generation ordering, movement and pose selection, and explicit offline simulation states.
+- The authenticated loopback transport passed tests for multiple clients, malformed and oversized frames, wrong keys, replay, spoofed servers, event injection and reconnection. The native Windows descriptor test passed creation, ACL verification, replacement and ownership-safe cleanup.
 
 ## Current implementation and open validation
 
