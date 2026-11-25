@@ -13,6 +13,9 @@
   "contributes": {
     "commands": [
       { "command": "pawmetry.refreshQuota", "title": "Pawmetry: Refresh Codex Quota" },
+      { "command": "pawmetry.connectDesktop", "title": "Pawmetry: Connect to Companion" },
+      { "command": "pawmetry.showDesktop", "title": "Pawmetry: Show Companion" },
+      { "command": "pawmetry.hideDesktop", "title": "Pawmetry: Hide Companion" },
       { "command": "pawmetry.nextSimulation", "title": "Pawmetry: Next Simulation Scenario" },
       { "command": "pawmetry.stopSimulation", "title": "Pawmetry: Stop Simulation" }
     ]

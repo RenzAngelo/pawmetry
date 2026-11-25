@@ -1,8 +1,13 @@
 const pose = document.querySelector("#pose");
-window.pawmetry.onView(({ pet, paused, reduced, mode, quota, resets }) => {
+window.pawmetry.onView(({ pet, motion, mode, quota, resets }) => {
   document.body.dataset.pose = pet.pose;
-  document.body.dataset.moving = String(pet.speed > 0 && !paused && !reduced);
-  document.body.style.setProperty("--pace", Math.round(550 / Math.max(0.15, pet.speed)) + "ms");
+  document.body.dataset.motion = motion.motion;
+  document.body.dataset.moving = String(!motion.frozen);
+  document.body.style.setProperty("--pace", motion.durationMs + "ms");
+  document.body.style.setProperty("--frames", motion.frames);
+  document.body.style.setProperty("--sprite-width", motion.width + "px");
+  document.body.style.setProperty("--sprite-height", motion.height + "px");
+  document.body.style.setProperty("--loops", motion.loop ? "infinite" : "1");
   pose.textContent = pet.pose.charAt(0).toUpperCase() + pet.pose.slice(1);
   const label = mode === "simulation" ? "Simulation" : quota === "fresh" ? "Live Codex" : "Codex · " + quota;
   document.querySelector("#mode").textContent = label;

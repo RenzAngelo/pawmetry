@@ -32,6 +32,7 @@ function Assert-Private([string]$Target, [bool]$IsDirectory) {
         $rules[0].PropagationFlags -ne 'None')) { throw 'IPC inheritance' }
 }
 
+$guard = $null
 try {
     if ($Action -eq 'publish' -and ![IO.Directory]::Exists($directory)) {
         $security = [Security.AccessControl.DirectorySecurity]::new()
@@ -43,6 +44,11 @@ try {
     }
     if (![IO.Directory]::Exists($directory)) { exit 0 }
     Assert-Private $directory $true
+    if ($Action -ne 'read') {
+        $guardPath = Join-Path $directory 'mutation.lock'
+        if ((Test-Path -LiteralPath $guardPath) -and ((Get-Item -LiteralPath $guardPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { exit 1 }
+        $guard = [IO.File]::Open($guardPath, 'OpenOrCreate', 'ReadWrite', 'None')
+    }
     $existing = [IO.File]::Exists($path)
     if ($existing) {
         Assert-Private $path $false
@@ -57,10 +63,18 @@ try {
     if ($Action -eq 'clear') {
         if ($existing -and [IO.File]::ReadAllText($path) -ceq $value) {
             [IO.File]::Delete($path)
-            if ($TestNamespace) { [IO.Directory]::Delete($directory, $false) }
+            if ($TestNamespace) {
+                $guard.Dispose()
+                $guard = $null
+                [IO.File]::Delete($guardPath)
+                [IO.Directory]::Delete($directory, $false)
+            }
         }
         exit 0
     }
+    $expected = [Console]::ReadLine()
+    $actual = if ($existing) { [IO.File]::ReadAllText($path) } else { 'null' }
+    if ($expected -cne $actual) { throw 'IPC descriptor changed' }
     $temp = Join-Path $directory ([Guid]::NewGuid().ToString('N') + '.tmp')
     $backup = $temp + '.previous'
     try {
@@ -82,3 +96,4 @@ try {
         [IO.File]::Delete($backup)
     }
 } catch { exit 1 }
+finally { if ($guard) { $guard.Dispose() } }

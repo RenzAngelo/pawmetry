@@ -5,7 +5,8 @@ import { readEndpoint, type Endpoint } from "./protocol.ts";
 
 type Action = "publish" | "read" | "clear";
 
-export async function windowsEndpoint(action: Action, endpoint?: Endpoint, testNamespace?: string): Promise<Endpoint | null> {
+export async function windowsEndpoint(action: Action, endpoint?: Endpoint, testNamespace?: string,
+  expected?: Endpoint | null): Promise<Endpoint | null> {
   const system = process.env.SystemRoot;
   if (process.platform !== "win32" || !system || !/^[A-Za-z]:[\\/]/.test(system)) {
     throw new Error("Windows IPC discovery unavailable");
@@ -35,6 +36,8 @@ export async function windowsEndpoint(action: Action, endpoint?: Endpoint, testN
       } catch { /* Close on malformed descriptors. */ }
       reject(new Error("Windows IPC descriptor invalid"));
     });
-    child.stdin.end(endpoint ? JSON.stringify(endpoint) + "\n" : undefined);
+    child.stdin.end(endpoint
+      ? JSON.stringify(endpoint) + "\n" + (action === "publish" ? JSON.stringify(expected ?? null) + "\n" : "")
+      : undefined);
   });
 }

@@ -9,7 +9,7 @@ export const hex = /^[0-9a-f]{64}$/;
 export const nonce = () => randomBytes(32).toString("hex");
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
-export type Operation = "status" | "refresh";
+export type Operation = "status" | "refresh" | "show" | "hide";
 export type Endpoint = { v: 1; port: number; key: string };
 export type Meter = { remaining: number | null; resetAt: number | null };
 export type Status = {
@@ -47,7 +47,18 @@ export function validStatus(value: unknown): value is Status {
     && (item.quota === "offline" || item.quota === "loading" || item.quota === "fresh"
       || item.quota === "stale" || item.quota === "unavailable")
     && item.activity === "unknown" && (item.validUntil === null || isInstant(item.validUntil))
-    && validMeter(item.energy) && validMeter(item.stamina);
+    && validMeter(item.energy) && validMeter(item.stamina)
+    && validAvailability(item as unknown as Status);
+}
+
+function validAvailability(status: Status): boolean {
+  if (status.mode === "simulation" ? status.quota !== "offline" : status.quota === "offline") return false;
+  if (status.quota === "fresh") {
+    return status.validUntil !== null && (status.energy.remaining !== null || status.stamina.remaining !== null);
+  }
+  return status.validUntil === null && [status.energy, status.stamina].every((meter) =>
+    meter.remaining === null && meter.resetAt === null,
+  );
 }
 
 export function proof(key: string, role: "server" | "client" | "result", client: string, server: string, body = "") {

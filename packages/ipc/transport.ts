@@ -29,7 +29,8 @@ export async function listenStatus(handle: (op: Operation) => Status) {
       }
       const request = fields(frame, ["op", "mac"]);
       const op = request?.op;
-      if ((op !== "status" && op !== "refresh") || !matches(request?.mac, proof(key, "client", client, challenge, op))) {
+      if ((op !== "status" && op !== "refresh" && op !== "show" && op !== "hide")
+        || !matches(request?.mac, proof(key, "client", client, challenge, op))) {
         socket.destroy(); return;
       }
       served = true;

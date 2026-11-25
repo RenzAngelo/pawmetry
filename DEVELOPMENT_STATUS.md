@@ -18,6 +18,8 @@
 - The maintainer deferred the two-window continuity check. The App Server workspace label and upstream data age remain unknown. Live hook delivery, minimized-window behavior and concurrent IDE activity are pending. See [MANUAL_TESTS.md](MANUAL_TESTS.md).
 - Desktop starts in simulation. Its tray enables live quota explicitly, and one scheduler owns provider reads. The scheduler respects freshness and reset expiry, coalesces concurrent requests, and applies rate limits and backoff. Eight synthetic editor clients requested refresh against one provider read.
 - The extension reads desktop state over IPC and visibly indicates disconnect, simulation and live quota. It never launches a quota probe. Two isolated VS Code extension hosts both received and displayed the same synthetic quota through the native descriptor and authenticated transport. Graphical controls, actual editor continuity and independent Windows logon isolation remain manual QA. Native desktop smoke uses the normal Windows user context because the managed shell denied Chromium AppContainer access to the runtime directory.
+- Windows IPC now compare-and-swaps its protected discovery descriptor. Eight IPC tests passed with native checks enabled, including recovery after a fixture process was killed and rejection of its retired key. The native single-instance smoke passed again. Cross-logon isolation remains unverified.
+- The desktop restores saved bounds and motion preferences, supports opt-in low-quota notifications, and maps pet state to reusable placeholder animation clips. Four targeted tests passed. The VS Code connect and show/hide commands use the existing authenticated channel.
 
 ## Next steps
 

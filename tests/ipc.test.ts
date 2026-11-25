@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createConnection, createServer } from "node:net";
 import { once } from "node:events";
 import { test } from "node:test";
 import { desktopClient } from "../packages/ipc/client.ts";
 import { windowsEndpoint } from "../packages/ipc/discovery.ts";
-import { loopback, maxFrameBytes, nonce, proof, type Status } from "../packages/ipc/protocol.ts";
+import { loopback, maxFrameBytes, nonce, proof, validStatus, type Status } from "../packages/ipc/protocol.ts";
 import { askStatus, listenStatus } from "../packages/ipc/transport.ts";
 
 const status: Status = { mode: "live", quota: "fresh", activity: "unknown", validUntil: 20_000,
@@ -97,6 +98,23 @@ test("editor discards stale endpoints and discovers a replacement after desktop 
   assert.equal(discoveries, 2);
 });
 
+test("simulation and stale frames cannot smuggle live meter data", () => {
+  assert.equal(validStatus({ ...status, mode: "simulation" }), false);
+  assert.equal(validStatus({ ...status, quota: "stale", validUntil: null }), false);
+  assert.equal(validStatus({ ...status, validUntil: null }), false);
+  assert.equal(validStatus(status), true);
+});
+
+test("the authenticated protocol permits only the two bounded window controls", async (t) => {
+  const commands: string[] = [];
+  const server = await listenStatus((command) => { commands.push(command); return status; });
+  t.after(server.close);
+  await askStatus(server.endpoint, "hide");
+  await askStatus(server.endpoint, "show");
+  await assert.rejects(askStatus({ ...server.endpoint, key: nonce() }, "hide"));
+  assert.deepEqual(commands, ["hide", "show"]);
+});
+
 test("native Windows discovery publishes, verifies, replaces and clears a logon-scoped descriptor",
   { skip: process.platform !== "win32" || process.env.PAWMETRY_NATIVE_IPC_TEST !== "1", timeout: 30_000 },
   async () => {
@@ -107,8 +125,10 @@ test("native Windows discovery publishes, verifies, replaces and clears a logon-
       assert.equal(await windowsEndpoint("read", undefined, suffix), null);
       await assert.doesNotReject(windowsEndpoint("publish", first, suffix), "Publish first descriptor");
       assert.deepEqual(await windowsEndpoint("read", undefined, suffix), first);
-      await assert.doesNotReject(windowsEndpoint("publish", second, suffix), "Replace descriptor");
+      await assert.rejects(windowsEndpoint("publish", second, suffix));
+      await assert.doesNotReject(windowsEndpoint("publish", second, suffix, first), "Replace descriptor");
       assert.deepEqual(await windowsEndpoint("read", undefined, suffix), second);
+      await assert.rejects(windowsEndpoint("publish", first, suffix, first), "A stale publisher must lose");
       await windowsEndpoint("clear", first, suffix);
       assert.deepEqual(await windowsEndpoint("read", undefined, suffix), second);
     } finally {
@@ -116,4 +136,40 @@ test("native Windows discovery publishes, verifies, replaces and clears a logon-
       if (latest) await windowsEndpoint("clear", latest, suffix);
     }
     assert.equal(await windowsEndpoint("read", undefined, suffix), null);
+  });
+
+test("native Windows recovers a descriptor left by a terminated companion process",
+  { skip: process.platform !== "win32" || process.env.PAWMETRY_NATIVE_IPC_TEST !== "1", timeout: 20_000 },
+  async () => {
+    const suffix = nonce().slice(0, 32);
+    const child = spawn(process.execPath, ["--input-type=module", "-e", `
+      import { listenStatus } from "./packages/ipc/transport.ts";
+      import { windowsEndpoint } from "./packages/ipc/discovery.ts";
+      const server = await listenStatus(() => (${JSON.stringify(status)}));
+      await windowsEndpoint("publish", server.endpoint, process.argv[1]);
+      console.log("ready");
+    `, suffix], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+    const exited = once(child, "close");
+    let server: Awaited<ReturnType<typeof listenStatus>> | undefined;
+    try {
+      const ready = await Promise.race([once(child.stdout, "data"), exited]);
+      assert.match(String(ready[0]), /ready/);
+      const previous = await windowsEndpoint("read", undefined, suffix);
+      assert.ok(previous);
+      assert.deepEqual(await askStatus(previous, "status"), status);
+      child.kill("SIGKILL");
+      await exited;
+      assert.deepEqual(await windowsEndpoint("read", undefined, suffix), previous);
+      await assert.rejects(askStatus(previous, "status"));
+      server = await listenStatus(() => status);
+      await windowsEndpoint("publish", server.endpoint, suffix, previous);
+      await assert.rejects(askStatus({ ...server.endpoint, key: previous.key }, "status"));
+      assert.deepEqual(await askStatus(server.endpoint, "status"), status);
+    } finally {
+      child.kill();
+      await exited;
+      if (server) await server.close();
+      const endpoint = await windowsEndpoint("read", undefined, suffix);
+      if (endpoint) await windowsEndpoint("clear", endpoint, suffix);
+    }
   });

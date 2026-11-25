@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, screen, Tray } from "electron";
+import { app, BrowserWindow, Menu, nativeImage, Notification, screen, Tray } from "electron";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,13 +9,16 @@ import { windowsEndpoint } from "../../packages/ipc/discovery.ts";
 import { askStatus, listenStatus } from "../../packages/ipc/transport.ts";
 import { nonce } from "../../packages/ipc/protocol.ts";
 import { resetText } from "../../packages/telemetry/time-display.ts";
+import { animationStyle, motionFor } from "../../packages/animation/animation.ts";
+import { fitBounds, loadPreferences, savePreferences } from "./preferences.ts";
+import { quotaAlerts } from "./quota-alerts.ts";
 
 const liveSmoke = process.argv.includes("--smoke-live");
 const smoke = liveSmoke || process.argv.includes("--smoke-test");
 const lockSmoke = process.argv.includes("--smoke-lock");
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const cache = local("../../.cache/");
-mkdirSync(cache, { recursive: true });
+if (lockSmoke || smoke) mkdirSync(cache, { recursive: true });
 const testId = process.env.PAWMETRY_LOCK_TEST_ID;
 if (lockSmoke && (!testId || !/^[a-f0-9]{32}$/.test(testId))) throw new Error("Expected an isolated lock test ID");
 const userData = lockSmoke ? join(cache, "desktop-lock-" + testId)
@@ -29,42 +32,66 @@ let window;
 let tray;
 let timer;
 let scenario = 0;
+let scenarioAt = Date.now();
 let paused = false;
 let clickThroughItem;
-let reduced = false;
 let endpointTask;
 let closing = false;
+let saveTimer;
 const live = createLiveQuota();
+const preferencePath = join(userData, "companion.json");
+const preferences = loadPreferences(preferencePath);
+const takeAlerts = quotaAlerts();
 
 function paint() {
   if (!window || window.isDestroyed()) return;
   const { status, pet } = live.view();
   const simulation = status.mode === "simulation";
   const now = Date.now();
+  const sample = simulation ? simulate(scenarios[scenario], scenarioAt) : null;
+  const shown = sample?.pet ?? pet;
+  const assumed = (slot) => sample?.quota?.windows.find((item) => item.slot === slot)?.resetsAtMs ?? null;
   window.webContents.send("pawmetry:view", {
-    pet: simulation ? simulate(scenarios[scenario], now).pet : pet, paused, reduced,
+    pet: shown, motion: animationStyle(shown, motionFor(shown.pose), paused || preferences.reducedMotion),
     mode: status.mode, quota: status.quota,
-    resets: { energy: resetText(status.energy.resetAt, now), stamina: resetText(status.stamina.resetAt, now) },
+    resets: {
+      energy: resetText(simulation ? assumed("energy") : status.energy.resetAt, now),
+      stamina: resetText(simulation ? assumed("stamina") : status.stamina.resetAt, now),
+    },
   });
 }
 
 function advance() {
   if (live.view().status.mode !== "simulation") return;
   scenario = (scenario + 1) % scenarios.length;
+  scenarioAt = Date.now();
   paint();
 }
 
 async function startEndpoint() {
   if (process.platform !== "win32") return null;
+  const existing = await windowsEndpoint("read");
+  if (existing && await askStatus(existing, "show").catch(() => null)) {
+    // Covers side-by-side executable names that Electron can give different native locks.
+    queueMicrotask(() => app.quit());
+    return null;
+  }
   const server = await listenStatus((op) => {
     if (op === "refresh") live.refresh(true);
+    if (op === "show") recover();
+    if (op === "hide") window?.hide();
     return live.view().status;
   });
   try {
-    await windowsEndpoint("publish", server.endpoint);
+    await windowsEndpoint("publish", server.endpoint, undefined, existing);
     return server;
   } catch {
     await server.close();
+    const winner = await windowsEndpoint("read").catch(() => null);
+    if (winner && await askStatus(winner, "show").catch(() => null)) {
+      queueMicrotask(() => app.quit());
+      return null;
+    }
     console.error("Pawmetry IPC discovery is unavailable.");
     return null;
   }
@@ -116,17 +143,36 @@ function keepOnDisplay() {
   if (!window || window.isDestroyed()) return;
   const bounds = window.getBounds();
   const area = screen.getDisplayMatching(bounds).workArea;
-  const x = Math.max(area.x, Math.min(bounds.x, area.x + area.width - bounds.width));
-  const y = Math.max(area.y, Math.min(bounds.y, area.y + area.height - bounds.height));
-  if (x !== bounds.x || y !== bounds.y) window.setPosition(x, y);
+  const safe = fitBounds(bounds, area);
+  if (safe.x !== bounds.x || safe.y !== bounds.y || safe.width !== bounds.width || safe.height !== bounds.height) {
+    window.setBounds(safe);
+  }
+}
+
+function persist() {
+  clearTimeout(saveTimer);
+  if (closing || !window || window.isDestroyed()) return;
+  // A transient motion event can fire repeatedly while dragging.
+  preferences.bounds = window.getBounds();
+  saveTimer = setTimeout(() => savePreferences(preferencePath, preferences), 250);
+}
+
+function checkNotices() {
+  if (!preferences.lowQuotaAlerts || !Notification.isSupported()) return;
+  for (const alert of takeAlerts(live.view().status, true)) {
+    new Notification({ title: "Pawmetry quota", body: `${alert.meter === "energy" ? "Energy" : "Stamina"} at ${alert.remaining}%`,
+      silent: true }).show();
+  }
 }
 
 async function start() {
   await app.whenReady();
   const { workArea } = screen.getPrimaryDisplay();
+  const wanted = preferences.bounds ?? { width: 292, height: 320, x: workArea.x + workArea.width - 312, y: workArea.y + 24 };
+  const initial = fitBounds(wanted, screen.getDisplayMatching(wanted).workArea);
   window = new BrowserWindow({
-    width: 292, height: 320, x: workArea.x + workArea.width - 312, y: workArea.y + 24,
-    transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true, resizable: false, show: false,
+    ...initial,
+    transparent: true, frame: false, alwaysOnTop: preferences.alwaysOnTop, skipTaskbar: true, resizable: false, show: false,
     webPreferences: { preload: local("preload.cjs"), contextIsolation: true, sandbox: true, nodeIntegration: false,
       partition: "pawmetry-simulation", backgroundThrottling: !smoke },
   });
@@ -165,18 +211,25 @@ async function start() {
     { label: "Show or hide", click: () => window.isVisible() ? window.hide() : recover() },
     { label: "Live Codex quota", type: "checkbox", click: (item) => {
       if (item.checked) live.enable();
-      else live.disable();
+      else { live.disable(); scenarioAt = Date.now(); }
       paint();
     } },
     { label: "Refresh live quota", click: () => live.refresh(true) },
     { label: "Pause", type: "checkbox", click: (item) => { paused = item.checked; paint(); } },
     { label: "Next scenario", click: advance },
-    { label: "Always on top", type: "checkbox", checked: true, click: (item) => window.setAlwaysOnTop(item.checked) },
-    { label: "Reduced motion", type: "checkbox", click: (item) => { reduced = item.checked; paint(); } },
+    { label: "Always on top", type: "checkbox", checked: preferences.alwaysOnTop, click: (item) => {
+      preferences.alwaysOnTop = item.checked; window.setAlwaysOnTop(item.checked); persist();
+    } },
+    { label: "Reduced motion", type: "checkbox", checked: preferences.reducedMotion, click: (item) => {
+      preferences.reducedMotion = item.checked; persist(); paint();
+    } },
+    { label: "Low-quota notifications", type: "checkbox", checked: preferences.lowQuotaAlerts, click: (item) => {
+      preferences.lowQuotaAlerts = item.checked; persist();
+    } },
     { label: "Window size", submenu: [
-      { label: "Compact", type: "radio", click: () => resize(264, 300) },
-      { label: "Standard", type: "radio", checked: true, click: () => resize(292, 320) },
-      { label: "Large", type: "radio", click: () => resize(356, 368) },
+      { label: "Compact", type: "radio", checked: initial.width === 264, click: () => resize(264, 300) },
+      { label: "Standard", type: "radio", checked: initial.width !== 264 && initial.width !== 356, click: () => resize(292, 320) },
+      { label: "Large", type: "radio", checked: initial.width === 356, click: () => resize(356, 368) },
     ] },
     { id: "click-through", label: "Click-through", type: "checkbox", click: (item) => {
       window.setIgnoreMouseEvents(item.checked);
@@ -187,12 +240,15 @@ async function start() {
   clickThroughItem = menu.getMenuItemById("click-through");
   tray.setContextMenu(menu);
   tray.on("double-click", recover);
+  window.on("move", persist);
+  window.on("resize", persist);
   screen.on("display-removed", keepOnDisplay);
   screen.on("display-metrics-changed", keepOnDisplay);
   window.showInactive();
   let lastScenario = Date.now();
   timer = setInterval(() => {
     live.refresh();
+    checkNotices();
     if (!window.isVisible()) return;
     if (!paused && Date.now() - lastScenario >= 4500) {
       lastScenario = Date.now();
@@ -237,6 +293,9 @@ if (lockSmoke) {
     event.preventDefault();
     closing = true;
     clearInterval(timer);
+    clearTimeout(saveTimer);
+    if (window && !window.isDestroyed()) preferences.bounds = window.getBounds();
+    savePreferences(preferencePath, preferences);
     const stopping = live.disable();
     const closingEndpoint = endpointTask.then(async (server) => {
       if (!server) return;

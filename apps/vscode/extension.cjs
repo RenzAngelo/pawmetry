@@ -1,4 +1,11 @@
 const vscode = require("vscode");
+const { existsSync } = require("node:fs");
+const { join } = require("node:path");
+const { pathToFileURL } = require("node:url");
+
+const packaged = join(__dirname, "shared");
+const shared = existsSync(packaged) ? packaged : join(__dirname, "..", "..");
+const bundled = (path) => import(pathToFileURL(join(shared, path)).href);
 
 function activate(context) {
   const quota = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -16,7 +23,7 @@ function activate(context) {
   quota.command = "pawmetry.refreshQuota";
   activity.name = "Pawmetry activity";
   connection.name = "Pawmetry desktop connection";
-  connection.command = "pawmetry.refreshQuota";
+  connection.command = "pawmetry.connectDesktop";
 
   function render() {
     const percent = (value) => value === null || value === undefined ? "?" : value + "%";
@@ -47,12 +54,12 @@ function activate(context) {
     try {
       if (!ask) {
         const [clientModule, dateModule] = await Promise.all([
-          import("../../packages/ipc/client.ts"), import("../../packages/telemetry/time-display.ts"),
+          bundled("packages/ipc/client.ts"), bundled("packages/telemetry/time-display.ts"),
         ]);
         if (context.extensionMode === vscode.ExtensionMode.Test) {
           const namespace = process.env.PAWMETRY_IPC_TEST_NAMESPACE;
           if (namespace && /^[a-f0-9]{32}$/.test(namespace)) {
-            const { windowsEndpoint } = await import("../../packages/ipc/discovery.ts");
+            const { windowsEndpoint } = await bundled("packages/ipc/discovery.ts");
             ask ??= clientModule.desktopClient(() => windowsEndpoint("read", undefined, namespace));
           } else {
             ask ??= async () => null;
@@ -72,13 +79,19 @@ function activate(context) {
   }
 
   context.subscriptions.push(quota, activity, connection,
+    vscode.commands.registerCommand("pawmetry.connectDesktop", async () => {
+      await exchange("status");
+      if (!desktop) vscode.window.showInformationMessage("Start the Pawmetry companion to connect.");
+    }),
+    vscode.commands.registerCommand("pawmetry.showDesktop", () => exchange("show")),
+    vscode.commands.registerCommand("pawmetry.hideDesktop", () => exchange("hide")),
     vscode.commands.registerCommand("pawmetry.refreshQuota", async () => {
       demo = null;
       render();
       return exchange("refresh");
     }),
     vscode.commands.registerCommand("pawmetry.nextSimulation", async () => {
-      const { scenarios, simulate } = await import("../../packages/simulation/scenarios.ts");
+      const { scenarios, simulate } = await bundled("packages/simulation/scenarios.ts");
       demo = simulate(scenarios[demoIndex]);
       demoIndex = (demoIndex + 1) % scenarios.length;
       render();

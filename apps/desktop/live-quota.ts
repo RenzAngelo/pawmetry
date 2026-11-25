@@ -88,7 +88,7 @@ export function createLiveQuota(now = Date.now, read = readCodex, elapsed = now 
       mode: control ? "live" : "simulation", activity: "unknown",
       quota: !control ? "offline" : available ? "fresh" : work ? "loading" : current ? "stale" : "unavailable",
       validUntil: available ? current?.validUntilMs ?? null : null,
-      energy, stamina,
+      energy: available ? energy : emptyMeter(), stamina: available ? stamina : emptyMeter(),
     };
     return { status, pet };
   }
