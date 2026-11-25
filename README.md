@@ -31,8 +31,10 @@ Add `--show-workspace` to display the provider's workspace label locally when su
 
 - Use `npm.cmd run simulate -- recharging` for an offline scenario in the terminal.
 - Use `npm.cmd run activity:probe -- --prepare-disposable` to prepare two temporary workspaces and a loopback receiver. Follow Codex's normal trust review. Native hook execution remains subject to the [manual checks](MANUAL_TESTS.md).
-- Use `npm.cmd ci` and `npm.cmd run desktop` for the Windows simulation companion. The first launch may download the pinned Electron runtime into the repository cache. Run `npm.cmd run desktop:smoke` to exercise the sandboxed renderer without opening a visible pet.
-- Run `& .\tools\test-vscode.ps1` for the local extension-host test with an isolated VS Code profile. For interactive development, launch VS Code with `--extensionDevelopmentPath` pointing to `apps/vscode`. The extension's commands provide an explicit Codex quota refresh and offline simulation. This development extension loads shared code from the repository.
+- Use `npm.cmd ci` and `npm.cmd run desktop` for the Windows companion. It starts in simulation. Enable **Live Codex quota** in the tray to read real quota. The first launch may download the pinned Electron runtime into the repository cache. Run `npm.cmd run desktop:smoke` for an offline renderer check. The separate `npm.cmd run desktop:smoke-live` intentionally makes one real quota request.
+- Run `& .\tools\test-vscode.ps1` for the local extension-host test with an isolated profile. For interactive development, launch VS Code with `--extensionDevelopmentPath` pointing to `apps/vscode`. Editors share the desktop's quota results via authenticated local IPC. The VS Code refresh command asks the desktop rather than launching Codex from the editor.
+- Run `npm.cmd run vscode:smoke-ipc` to test two isolated VS Code hosts against one synthetic coordinator. To include the disposable native discovery and hook-list checks in `npm.cmd test`, set `PAWMETRY_NATIVE_IPC_TEST=1` and `PAWMETRY_NATIVE_HOOKS_TEST=1` in the test shell.
+- Run `npm.cmd run desktop:smoke-lock` to verify the desktop single-instance lock using an isolated profile and zero provider requests.
 
 ## Project documents
 

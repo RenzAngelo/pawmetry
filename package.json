@@ -12,6 +12,9 @@
     "simulate": "node tools/simulation.ts",
     "desktop": "node tools/launch-desktop.mjs",
     "desktop:smoke": "node tools/launch-desktop.mjs --smoke-test",
+    "desktop:smoke-live": "node tools/launch-desktop.mjs --smoke-live",
+    "desktop:smoke-lock": "node tools/test-desktop-lock.mjs",
+    "vscode:smoke-ipc": "node tools/test-vscode-ipc.ts",
     "test": "node --test tests/*.test.ts"
   },
   "devDependencies": {

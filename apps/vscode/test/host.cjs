@@ -14,7 +14,14 @@ exports.run = async function () {
     assert.equal(demo.activity, "Sim activity · energetic");
     const initial = await vscode.commands.executeCommand("pawmetry.stopSimulation");
     assert.equal(initial.activity, "Activity · Unknown");
-    assert.match(initial.quota, /\? \/ \?/);
+    if (process.env.PAWMETRY_IPC_TEST_NAMESPACE) {
+      assert.equal(await vscode.commands.executeCommand("pawmetry.refreshQuota"), true);
+      const live = await vscode.commands.executeCommand("pawmetry.stopSimulation");
+      assert.match(live.quota, /58% \/ 73%/);
+      assert.equal(live.activity, "Activity · Unknown");
+    } else {
+      assert.match(initial.quota, /\? \/ \?/);
+    }
     await writeFile(result, "passed", { flag: "wx" });
   } catch (error) {
     await writeFile(result, "failed", { flag: "wx" });

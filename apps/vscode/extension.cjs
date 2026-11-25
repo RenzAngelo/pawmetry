@@ -3,61 +3,79 @@ const vscode = require("vscode");
 function activate(context) {
   const quota = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   const activity = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+  const connection = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);
   let demo = null;
-  let snapshot = null;
-  let reading = false;
+  let desktop = null;
+  let reading = null;
+  let operationId = 0;
+  let disposed = false;
   let demoIndex = 0;
-  const cancellation = new AbortController();
+  let ask;
+  let resetText;
   quota.name = "Pawmetry quota";
   quota.command = "pawmetry.refreshQuota";
   activity.name = "Pawmetry activity";
+  connection.name = "Pawmetry desktop connection";
+  connection.command = "pawmetry.refreshQuota";
 
   function render() {
     const percent = (value) => value === null || value === undefined ? "?" : value + "%";
     const now = Date.now();
-    const windows = snapshot && now >= snapshot.observedAtMs && now < snapshot.validUntilMs
-      ? snapshot.windows.filter((window) => window.resetsAtMs === null || now < window.resetsAtMs)
-      : [];
-    const remaining = (slot) => windows.find((window) => window.slot === slot)?.remainingPercent;
-    const resetInfo = windows.filter((window) => window.slot !== "other" && window.resetsAtMs !== null).map((window) => {
-      const minutes = Math.ceil((window.resetsAtMs - now) / 60000);
-      const time = new Date(window.resetsAtMs).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-      const countdown = minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
-      return `${window.slot}: ${time} · ${countdown} left`;
+    const valid = desktop?.quota === "fresh" && desktop.validUntil !== null && now < desktop.validUntil;
+    const available = (slot) => valid && (desktop[slot].resetAt === null || desktop[slot].resetAt > now);
+    const remaining = (slot) => available(slot) ? desktop[slot].remaining : null;
+    const resetInfo = ["energy", "stamina"].flatMap((slot) => {
+      const text = available(slot) ? resetText?.(desktop[slot].resetAt, now) : null;
+      return text ? [`${slot} · ${text}`] : [];
     });
     const values = demo ? [demo.pet.energy, demo.pet.stamina] : [remaining("energy"), remaining("stamina")];
-    quota.text = reading ? "Pawmetry · Reading quota…" :
-      `${demo ? "Pawmetry Sim" : "Pawmetry"} · ${percent(values[0])} / ${percent(values[1])}`;
+    quota.text = `${demo ? "Pawmetry Sim" : "Pawmetry"} · ${percent(values[0])} / ${percent(values[1])}`;
     quota.tooltip = demo ? "Simulated energy and stamina" :
-      ["Codex energy and stamina. Select to refresh.", ...resetInfo].join("\n");
+      ["Codex energy and stamina from the desktop companion.", ...resetInfo].join("\n");
     activity.text = demo ? `Sim activity · ${demo.pet.pose}` : "Activity · Unknown";
     activity.tooltip = demo ? "Offline demonstration" : "Live activity requires a verified local activity source.";
+    const health = desktop?.quota === "fresh" && !valid ? "stale" : desktop?.quota;
+    connection.text = desktop ? "Pawmetry desktop · " + (desktop.mode === "simulation" ? "Simulation" : valid ? "Live" : "Quota " + health)
+      : "Pawmetry desktop · Disconnected";
+    connection.tooltip = desktop ? "Connected to the local desktop companion"
+      : "Start the companion and enable live quota from its tray menu.";
   }
 
-  context.subscriptions.push(quota, activity,
+  async function exchange(op) {
+    if (process.platform !== "win32" || vscode.env.remoteName || !vscode.workspace.isTrusted || disposed) return false;
+    const id = ++operationId;
+    try {
+      if (!ask) {
+        const [clientModule, dateModule] = await Promise.all([
+          import("../../packages/ipc/client.ts"), import("../../packages/telemetry/time-display.ts"),
+        ]);
+        if (context.extensionMode === vscode.ExtensionMode.Test) {
+          const namespace = process.env.PAWMETRY_IPC_TEST_NAMESPACE;
+          if (namespace && /^[a-f0-9]{32}$/.test(namespace)) {
+            const { windowsEndpoint } = await import("../../packages/ipc/discovery.ts");
+            ask ??= clientModule.desktopClient(() => windowsEndpoint("read", undefined, namespace));
+          } else {
+            ask ??= async () => null;
+          }
+        } else {
+          ask ??= clientModule.desktopClient();
+        }
+        resetText = dateModule.resetText;
+      }
+      const result = await ask(op);
+      if (!disposed && id === operationId) { desktop = result; render(); }
+      return result?.mode === "live";
+    } catch {
+      if (!disposed && id === operationId) { desktop = null; render(); }
+      return false;
+    }
+  }
+
+  context.subscriptions.push(quota, activity, connection,
     vscode.commands.registerCommand("pawmetry.refreshQuota", async () => {
-      if (reading || vscode.env.remoteName) return false;
-      reading = true;
       demo = null;
       render();
-      try {
-        const { discoverCodex } = await import("../../tools/codex-quota-probe/discovery.ts");
-        const result = await discoverCodex();
-        if (result.status !== "found") {
-          snapshot = null;
-          return false;
-        }
-        const { probeQuota } = await import("../../tools/codex-quota-probe/app-server.ts");
-        const { normalizeCodexSnapshot } = await import("../../tools/codex-quota-probe/telemetry.ts");
-        snapshot = normalizeCodexSnapshot(await probeQuota(result.executable, { signal: cancellation.signal }), "editor");
-        return true;
-      } catch {
-        snapshot = null;
-        return false;
-      } finally {
-        reading = false;
-        if (!cancellation.signal.aborted) render();
-      }
+      return exchange("refresh");
     }),
     vscode.commands.registerCommand("pawmetry.nextSimulation", async () => {
       const { scenarios, simulate } = await import("../../packages/simulation/scenarios.ts");
@@ -72,10 +90,16 @@ function activate(context) {
       return { quota: quota.text, activity: activity.text };
     }));
   const timer = setInterval(render, 1000);
-  context.subscriptions.push({ dispose() { clearInterval(timer); cancellation.abort(); } });
+  const poll = () => {
+    reading ??= exchange("status").finally(() => { reading = null; });
+  };
+  const polling = setInterval(poll, 4000);
+  context.subscriptions.push({ dispose() { disposed = true; clearInterval(timer); clearInterval(polling); } });
   render();
+  poll();
   quota.show();
   activity.show();
+  connection.show();
 }
 
 exports.activate = activate;

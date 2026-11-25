@@ -3,14 +3,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
-<title>Pawmetry simulation</title>
+<title>Pawmetry</title>
 <link rel="stylesheet" href="./style.css">
 <main class="card">
-  <header><strong>Pawmetry</strong><span>Simulation</span></header>
+  <header><strong>Pawmetry</strong><span id="mode">Simulation</span></header>
   <div class="stage" aria-hidden="true"><div class="placeholder"><i></i><i></i></div></div>
   <p id="pose" role="status">Starting</p>
   <div class="metric"><label for="energy">Energy</label><meter id="energy" max="100" value="0"></meter><output id="energy-text">—</output></div>
+  <small id="energy-reset"></small>
   <div class="metric"><label for="stamina">Stamina</label><meter id="stamina" max="100" value="0"></meter><output id="stamina-text">—</output></div>
+  <small id="stamina-reset"></small>
 </main>
 <script src="./renderer.js"></script>
 </html>
