@@ -17,7 +17,8 @@ async function host() {
   assert.ok(system);
   const ps = join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const script = fileURLToPath(new URL("./test-vscode.ps1", import.meta.url));
-  const child = spawn(ps, ["-NoProfile", "-NonInteractive", "-File", script], {
+  const vsix = process.argv[2];
+  const child = spawn(ps, ["-NoProfile", "-NonInteractive", "-File", script, ...(vsix ? ["-Vsix", vsix] : [])], {
     env: { ...process.env, PAWMETRY_IPC_TEST_NAMESPACE: namespace }, stdio: ["ignore", "inherit", "inherit"], windowsHide: true,
   });
   const [code] = await once(child, "close");

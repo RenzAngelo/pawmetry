@@ -20,9 +20,11 @@
 - The extension reads desktop state over IPC and visibly indicates disconnect, simulation and live quota. It never launches a quota probe. Two isolated VS Code extension hosts both received and displayed the same synthetic quota through the native descriptor and authenticated transport. Graphical controls, actual editor continuity and independent Windows logon isolation remain manual QA. Native desktop smoke uses the normal Windows user context because the managed shell denied Chromium AppContainer access to the runtime directory.
 - Windows IPC now compare-and-swaps its protected discovery descriptor. Eight IPC tests passed with native checks enabled, including recovery after a fixture process was killed and rejection of its retired key. The native single-instance smoke passed again. Cross-logon isolation remains unverified.
 - The desktop restores saved bounds and motion preferences, supports opt-in low-quota notifications, and maps pet state to reusable placeholder animation clips. Four targeted tests passed. The VS Code connect and show/hide commands use the existing authenticated channel.
+- The Windows test run passed 55 tests. The native hook-configuration test was skipped this turn because writing hook configuration requires consent. The packaged desktop rendered offline after ZIP extraction. The VSIX installed and received matching synthetic quota in two isolated editor profiles.
+- Local artifacts are in `dist/pawmetry-mNDIvt`. The portable ZIP includes Electron's bundled licenses. The pinned VSCE tool is used only to build the VSIX. The project lockfile audit reported zero advisories. The CI workflow is staged in the repository and has not run remotely.
 
 ## Next steps
 
 1. Record the results in [MANUAL_TESTS.md](MANUAL_TESTS.md), including quota continuity and actual native hook delivery.
 2. Verify the remaining cross-logon and visible editor cases. Keep live activity unknown until native delivery and concurrent sessions are corroborated. Propose a separate authenticated publisher only after that evidence is available.
-3. Keep milestones with open acceptance criteria unmerged. The placeholder artwork remains temporary.
+3. Rebuild local artifacts with `npm.cmd run package:local`. If distribution is approved later, choose a per-user installer and verify signing, notification registration, publisher identity, and the project license before release. Keep milestones with open acceptance criteria unmerged.

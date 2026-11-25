@@ -2,6 +2,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; padding: 10px; }
 .card { height: calc(100vh - 20px); padding: 18px; background: #151f24; border: 1px solid #40505a; border-radius: 20px; -webkit-app-region: drag; }
+.card { position: relative; }
 header, .metric { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 header span { color: #a9e6ca; font-size: 12px; }
 .stage { display: grid; height: clamp(80px, calc(100vh - 206px), 170px); place-items: center; }
@@ -15,6 +16,9 @@ body[data-motion="celebration"] { --gesture: cheer; }
 body[data-pose="sleeping"] .placeholder i { height: 3px; }
 body[data-pose="unknown"] .placeholder, body[data-pose="disconnected"] .placeholder { background: #829196; border-color: #acb5b8; }
 #pose { margin: 0 0 14px; text-align: center; font-weight: 600; }
+#quota-notice { position: absolute; top: 36px; left: 17px; right: 17px; margin: 0; padding: 6px 8px; border-radius: 6px;
+  color: #fff0cd; background: #53391c; text-align: center; font-size: 12px; }
+#quota-notice:empty { display: none; }
 .metric { font-size: 13px; margin-top: 10px; }
 .metric label { width: 51px; }
 .metric meter { flex: 1; accent-color: #87d5b1; }

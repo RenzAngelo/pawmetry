@@ -1,5 +1,5 @@
 const pose = document.querySelector("#pose");
-window.pawmetry.onView(({ pet, motion, mode, quota, resets }) => {
+window.pawmetry.onView(({ pet, motion, mode, quota, resets, notice }) => {
   document.body.dataset.pose = pet.pose;
   document.body.dataset.motion = motion.motion;
   document.body.dataset.moving = String(!motion.frozen);
@@ -11,6 +11,8 @@ window.pawmetry.onView(({ pet, motion, mode, quota, resets }) => {
   pose.textContent = pet.pose.charAt(0).toUpperCase() + pet.pose.slice(1);
   const label = mode === "simulation" ? "Simulation" : quota === "fresh" ? "Live Codex" : "Codex · " + quota;
   document.querySelector("#mode").textContent = label;
+  const alert = document.querySelector("#quota-notice");
+  if (alert.textContent !== notice) alert.textContent = notice;
   for (const metric of ["energy", "stamina"]) {
     const value = pet[metric];
     const meter = document.querySelector("#" + metric);

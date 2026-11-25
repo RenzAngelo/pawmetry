@@ -27,7 +27,7 @@ Ship one original animated pet on Windows 11 x64 and a VS Code status bar, Pawme
 | 2B–C. Remaining feasibility probes | After approval, test activity and desktop-plus-extension operation. Decide IPC transport and which verified capabilities enter the MVP |
 | 3. Simulation product slice | Establish the workspaces and canonical branding, build the real overlay and extension shell, add original sprites and pass offline, reconnect and accessibility tests |
 | 4. Windows/Codex MVP | Integrate only the successful provider probes. Pass the capability matrix, failure tests, data-boundary review and clean Windows installation smoke tests |
-| 5. Distribution readiness | Produce unpublished VSIX and per-user Windows installer. Verify mode-specific install/uninstall, dependency and asset notices, signing and SmartScreen handling. Decide license, trademark and publisher identity before release approval |
+| 5. Distribution readiness | The local portable ZIP and VSIX passed isolated smoke tests. A per-user installer, signing, full uninstall and SmartScreen checks, license, trademark, and publisher identity remain release gates |
 | 6. Provider expansion | Evaluate Claude Code and Copilot independently by surface, version, plan and capability. Consider other operating systems and custom assets after Windows is stable |
 
 ## Review gate

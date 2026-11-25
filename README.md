@@ -36,6 +36,20 @@ Add `--show-workspace` to display the provider's workspace label locally when su
 - Run `npm.cmd run vscode:smoke-ipc` to test two isolated VS Code hosts against one synthetic coordinator. To include the disposable native discovery and hook-list checks in `npm.cmd test`, set `PAWMETRY_NATIVE_IPC_TEST=1` and `PAWMETRY_NATIVE_HOOKS_TEST=1` in the test shell.
 - Run `npm.cmd run desktop:smoke-lock` to verify the desktop single-instance lock using an isolated profile and zero provider requests.
 
+## Build and package locally
+
+Run `npm.cmd ci`, then `npm.cmd test`. Run `npm.cmd run build:local` to stage self-contained app and extension sources. Run `npm.cmd run package:local` on Windows x64 to create a portable ZIP and a VSIX in the printed `dist/pawmetry-*` directory. Packaging pins the official VSCE tool and uses the repository npm and Electron caches. The GitHub Actions workflow runs the tests and builds source staging with read-only permissions. [VS Code packaging](https://code.visualstudio.com/api/working-with-extensions/publishing-extension) · [Electron distribution](https://www.electronjs.org/docs/latest/tutorial/application-distribution)
+
+Verify an artifact using `& .\tools\test-desktop-package.ps1 -Zip <zip-path>` or `npm.cmd run vscode:smoke-ipc -- <vsix-path>`. Both use disposable profiles and make zero provider requests.
+
+1. Extract the ZIP into a user-owned folder and launch `Pawmetry.exe`. It starts in simulation. The tray controls live quota, size, pause, reduced motion, and optional low-quota alerts.
+2. For the extension, choose **Install from VSIX** in VS Code and select the local package. Use local trusted VS Code windows with the companion running. **Pawmetry: Connect to Companion**, **Show Companion**, and **Hide Companion** use the local endpoint. A standalone quota read is available through `npm.cmd run quota:probe` if the desktop is unavailable.
+3. Quit from the tray before moving or removing the extracted folder. Uninstall **Pawmetry Prototype** in the VS Code Extensions view. To reset desktop preferences, exit and remove only `%APPDATA%\Pawmetry\companion.json`.
+
+The artifacts are unsigned local-development packages. An installer decision remains open while licensing, publisher identity, signing and Start Menu registration are reviewed. NSIS supports a future per-user installer. Native Windows toasts may require Start Menu registration. The companion displays its own low-quota notice when visible even if Windows suppresses the toast. [Electron Builder NSIS](https://www.electron.build/nsis.html) · [Electron notifications on Windows](https://www.electronjs.org/docs/latest/tutorial/notifications#windows)
+
+If the editor reports disconnected, check the companion tray and the current Windows logon. The discovery helper respects Windows PowerShell policy. If policy blocks it, use the desktop on its own and leave the policy in place. Double-click the tray icon to recover from click-through.
+
 ## Project documents
 
 | Document | Contents |

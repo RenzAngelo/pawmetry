@@ -38,6 +38,7 @@ let clickThroughItem;
 let endpointTask;
 let closing = false;
 let saveTimer;
+let notice;
 const live = createLiveQuota();
 const preferencePath = join(userData, "companion.json");
 const preferences = loadPreferences(preferencePath);
@@ -54,6 +55,7 @@ function paint() {
   window.webContents.send("pawmetry:view", {
     pet: shown, motion: animationStyle(shown, motionFor(shown.pose), paused || preferences.reducedMotion),
     mode: status.mode, quota: status.quota,
+    notice: status.quota === "fresh" && notice && notice.expires > now ? notice.message : "",
     resets: {
       energy: resetText(simulation ? assumed("energy") : status.energy.resetAt, now),
       stamina: resetText(simulation ? assumed("stamina") : status.stamina.resetAt, now),
@@ -158,15 +160,18 @@ function persist() {
 }
 
 function checkNotices() {
-  if (!preferences.lowQuotaAlerts || !Notification.isSupported()) return;
-  for (const alert of takeAlerts(live.view().status, true)) {
-    new Notification({ title: "Pawmetry quota", body: `${alert.meter === "energy" ? "Energy" : "Stamina"} at ${alert.remaining}%`,
-      silent: true }).show();
+  const alerts = takeAlerts(live.view().status, preferences.lowQuotaAlerts);
+  if (alerts.length) {
+    const message = alerts.map((alert) =>
+      `${alert.meter === "energy" ? "Energy" : "Stamina"} at ${alert.remaining}%`).join(" · ");
+    notice = { message, expires: Date.now() + 9000 };
+    if (Notification.isSupported()) new Notification({ title: "Pawmetry quota", body: message, silent: true }).show();
   }
 }
 
 async function start() {
   await app.whenReady();
+  if (!smoke && process.platform === "win32") app.setAppUserModelId(process.execPath);
   const { workArea } = screen.getPrimaryDisplay();
   const wanted = preferences.bounds ?? { width: 292, height: 320, x: workArea.x + workArea.width - 312, y: workArea.y + 24 };
   const initial = fitBounds(wanted, screen.getDisplayMatching(wanted).workArea);
@@ -211,7 +216,7 @@ async function start() {
     { label: "Show or hide", click: () => window.isVisible() ? window.hide() : recover() },
     { label: "Live Codex quota", type: "checkbox", click: (item) => {
       if (item.checked) live.enable();
-      else { live.disable(); scenarioAt = Date.now(); }
+      else { live.disable(); notice = undefined; scenarioAt = Date.now(); }
       paint();
     } },
     { label: "Refresh live quota", click: () => live.refresh(true) },
@@ -224,7 +229,9 @@ async function start() {
       preferences.reducedMotion = item.checked; persist(); paint();
     } },
     { label: "Low-quota notifications", type: "checkbox", checked: preferences.lowQuotaAlerts, click: (item) => {
-      preferences.lowQuotaAlerts = item.checked; persist();
+      preferences.lowQuotaAlerts = item.checked;
+      if (!item.checked) { notice = undefined; paint(); }
+      persist();
     } },
     { label: "Window size", submenu: [
       { label: "Compact", type: "radio", checked: initial.width === 264, click: () => resize(264, 300) },

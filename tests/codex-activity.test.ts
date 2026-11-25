@@ -77,6 +77,9 @@ test("workspace reducer handles concurrent tools, missed starts, duplicates, and
   assert.equal(timeline.state("A", a.session, 1250), "interrupted");
   assert.equal(timeline.observe(event("PreToolUse", 1240, "late"), 1251), false);
   assert.equal(timeline.state("B", b.session, 17_000), "stale");
+  const laterTurn = projectHook({ ...input, hook_event_name: "Stop", turn_id: "next-turn" }, token, "A", 20000)!;
+  timeline.observe(laterTurn, 20000);
+  assert.equal(timeline.observe(event("PreToolUse", 21000, "late-invocation"), 21000), false);
 });
 
 test("missing close events go stale and recovery requires new session evidence after confirmed disconnect", async () => {

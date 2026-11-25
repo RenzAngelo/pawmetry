@@ -47,8 +47,10 @@ export class HookTimeline {
     if (!event.turn || session.state === "disconnected" || session.closedTurns.has(event.turn)) return false;
     const terminal = event.event === "interrupted" || event.event === "turn-stopped";
     if (terminal) {
-      for (const [turn, at] of session.closedTurns) if (now - at > deliveryWindowMs) session.closedTurns.delete(turn);
-      if (session.closedTurns.size >= 64) return false;
+      if (session.closedTurns.size >= 64) {
+        const oldest = session.closedTurns.keys().next().value;
+        if (oldest) session.closedTurns.delete(oldest);
+      }
       session.closedTurns.set(event.turn, event.sentAt);
     }
     if (session.turn !== event.turn) {
