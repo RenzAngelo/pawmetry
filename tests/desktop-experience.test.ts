@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { defaults, dimensions, fitBounds, loadPreferences, placeSettings, preferences, savePreferences } from "../apps/desktop/preferences.ts";
+import { defaults, dimensions, fitBounds, loadPreferences, placeCompanionMenu, placeSettings, preferences, savePreferences } from "../apps/desktop/preferences.ts";
 import { validSetting } from "../apps/desktop/settings-model.ts";
 import { enrollmentTargets } from "../apps/desktop/activity-setup.ts";
 import { quotaAlerts } from "../apps/desktop/quota-alerts.ts";
@@ -41,6 +41,21 @@ test("window bounds remain usable across negative monitor coordinates and remova
     { ...bounds, y: 672 });
   assert.deepEqual(fitBounds(bounds, { x: 0, y: 40, width: 300, height: 280 }),
     { x: 0, y: 40, width: 300, height: 280 });
+});
+
+test("options prefer the right and use other edges or contained minimum overlap", () => {
+  const work = { x: -600, y: 40, width: 1200, height: 900 };
+  const pet = { x: -280, y: 825, width: 136, height: 116 };
+  assert.deepEqual(placeCompanionMenu(pet, work), { x: -136, y: 552, width: 256, height: 388 });
+  assert.equal(placeCompanionMenu({ ...pet, x: 456 }, work).x, 192);
+  const narrow = { x: -300, y: -1000, width: 300, height: 900 };
+  const above = { ...pet, x: -220, y: -270 };
+  assert.equal(placeCompanionMenu(above, narrow).y, above.y - 396);
+  const below = { ...above, y: -975 };
+  assert.equal(placeCompanionMenu(below, narrow).y, below.y + below.height + 8);
+  const spare = { x: 40, y: 30, width: 280, height: 250 };
+  const fallback = placeCompanionMenu({ x: 110, y: 90, width: 150, height: 140 }, spare);
+  assert.deepEqual(fitBounds(fallback, spare), fallback);
 });
 
 test("Settings restores independently and recovers invalid or removed-monitor positions", () => {

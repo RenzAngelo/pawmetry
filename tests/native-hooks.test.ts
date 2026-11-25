@@ -17,7 +17,8 @@ test("native Codex discovers independent disposable workspace hooks without appr
     if (installed.status !== "found") return;
     const root = await mkdtemp(join(tmpdir(), "pawmetry-native-hooks-"));
     const profile = join(root, "profile");
-    const workspaces = [join(root, "workspace-a"), join(root, "workspace-b")];
+    const activity = join(root, `Pawmetry-activity-${"a".repeat(32)}`);
+    const workspaces = [join(activity, "workspace-a"), join(activity, "workspace-b")];
     const unreviewed = join(root, "workspace-unreviewed");
     const files = workspaces.map((cwd) => join(cwd, ".codex", "hooks.json"));
     try {
@@ -53,7 +54,7 @@ test("native Codex discovers independent disposable workspace hooks without appr
       const list = async (cwds = workspaces) => {
         const { data } = await request("hooks/list", { cwds });
         assert.equal(data.length, cwds.length);
-        return data.map((entry: { errors: unknown[]; hooks: Array<{ source: string; eventName: string; trustStatus: string }> }) => {
+        return data.map((entry: { errors: unknown[]; hooks: Array<{ source: string; eventName: string; trustStatus: string; currentHash: string }> }) => {
           assert.equal(entry.errors.length, 0);
           return entry.hooks.filter((hook) => hook.source === "project" || hook.source === "user");
         });
@@ -64,16 +65,25 @@ test("native Codex discovers independent disposable workspace hooks without appr
         });
         send({ method: "initialized" });
         assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 0]);
-        const configs = (["A", "B"] as const).map((label, index) => hookConfig(process.execPath, 12345, label.toLowerCase().repeat(64), label, false, workspaces[index]));
+        const helper = join(activity, `PawmetryActivity-${"a".repeat(64)}.exe`);
+        const system = join(process.env.SystemRoot!, "System32");
+        const configs = (["A", "B"] as const).map((label, index) => hookConfig(helper, label, workspaces[index], system));
         await Promise.all(configs.map((config, index) => writeFile(files[index], config, { flag: "wx" })));
-        await writeFile(join(unreviewed, ".codex", "hooks.json"), hookConfig(process.execPath, 12345, "a".repeat(64), "A", false, unreviewed));
+        await writeFile(join(unreviewed, ".codex", "hooks.json"), configs[0]);
         assert.deepEqual((await list([unreviewed])).map((hooks: unknown[]) => hooks.length), [0],
           "a project layer without native project trust is skipped even with its hook file present");
-        for (const hooks of await list()) {
+        const initial = await list();
+        for (const hooks of initial) {
           const names = Object.keys(JSON.parse(configs[0]).hooks).map((name) => name[0].toLowerCase() + name.slice(1));
           assert.deepEqual(hooks.map((hook: { eventName: string }) => hook.eventName).sort(), names.sort());
           assert.ok(hooks.every((hook: { trustStatus: string }) => hook.trustStatus === "untrusted"));
         }
+        const hashes = (result: typeof initial) => result.map((hooks: { currentHash: string }[]) => hooks.map((hook) => hook.currentHash));
+        assert.ok(hashes(initial).flat().every((hash: unknown) => typeof hash === "string" && hash.length > 0));
+        await writeFile(helper, "synthetic non-executable fixture");
+        assert.deepEqual(hashes(await list()), hashes(initial), "referenced file bytes are not part of a project hook trust hash");
+        await writeFile(files[0], configs[0].replace('"timeout": 2', '"timeout": 3'));
+        assert.notDeepEqual(hashes(await list())[0], hashes(initial)[0], "a change to the declaration changes its trust hash");
         await unlink(files[0]);
         assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 8]);
         await unlink(files[1]);

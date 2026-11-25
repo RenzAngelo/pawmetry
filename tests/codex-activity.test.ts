@@ -1,157 +1,176 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { createSocket } from "node:dgram";
-import { once } from "node:events";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { connect } from "node:net";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
-import { acceptDiagnostic, acceptObservation, maxHookBytes, projectHook, sealDiagnostic, sealObservation } from "../tools/codex-activity-probe/protocol.ts";
+import { readDiagnostic, readObservation, hookEvents, type HookName, type HookWorkspace } from "../tools/codex-activity-probe/protocol.ts";
 import { HookTimeline } from "../tools/codex-activity-probe/timeline.ts";
-import { join } from "node:path";
+import { hookProof, listenForHooks } from "../tools/codex-activity-probe/transport.ts";
+import { hookConfig } from "../tools/codex-activity-probe/receiver.ts";
 import { reviewCommand } from "../apps/desktop/activity-client.ts";
 
-const token = "a".repeat(64);
-const keys = { A: token, B: "b".repeat(64) };
-const input = { hook_event_name: "PreToolUse", session_id: "session-raw", turn_id: "turn-raw", tool_use_id: "tool-raw", transcript_path: "path-canary",
-  tool_input: { command: "input-canary" }, cwd: "workspace-canary", prompt: "prompt-canary" };
-const script = fileURLToPath(new URL("../tools/codex-activity-probe/hook.ts", import.meta.url));
-
-async function invoke(payload: string, port: number, name = "PreToolUse", workspace: "A" | "B" = "A") {
-  const child = spawn(process.execPath, [script, String(port), keys[workspace], workspace, name], { stdio: ["pipe", "pipe", "pipe"] });
-  let output = "";
-  child.stdout.on("data", (chunk) => { output += String(chunk); });
-  child.stderr.on("data", (chunk) => { output += String(chunk); });
-  child.stdin.on("error", () => {}); // An oversized message can be rejected before all bytes are sent.
-  child.stdin.end(payload);
-  const [code] = await once(child, "close");
-  assert.equal(code, 0);
-  assert.equal(output, name === "Stop" ? "{}\n" : "");
-}
-
-test("projects only the tool-start event and a run-scoped pseudonym", () => {
-  const event = projectHook(input, token, "A", 1000)!;
-  const packet = sealObservation(event, token);
-  assert.doesNotMatch(packet.toString(), /canary|session-raw|turn-raw|tool-raw|a{64}/);
-  assert.deepEqual(acceptObservation(packet, keys, 1000), event);
-  assert.notEqual(projectHook(input, keys.B, "B")?.session, event.session);
-  assert.equal(projectHook({ ...input, hook_event_name: "PermissionRequest" }, token, "A"), null);
-  assert.equal(projectHook({ ...input, turn_id: "" }, token, "A"), null);
-  assert.equal(acceptObservation(sealObservation({ ...event, workspace: "B" }, token), keys, 1000), null);
-  assert.equal(acceptObservation(packet, keys, 11_001), null);
+const run = `C:\\Users\\Test User\\Pawmetry-activity-${"a".repeat(32)}`;
+const helper = `${run}\\PawmetryActivity-${"a".repeat(64)}.exe`;
+const root = `${run}\\workspace-a`;
+const system = "C:\\Windows\\System32";
+const convert = (value: string) => createHash("sha256").update(value).digest("hex");
+const makeEvent = (name: HookName, at: number, tool = "fixture", workspace: HookWorkspace = "A",
+  session = "session", turn = "turn") => ({
+  workspace, event: hookEvents[name], sentAt: at, delivery: randomBytes(16).toString("hex"),
+  session: convert(workspace + session),
+  turn: name === "SessionStart" || name === "SessionEnd" ? null : convert(turn),
+  tool: name === "PreToolUse" || name === "PostToolUse" ? convert(tool) : null,
 });
 
-test("signed diagnostics cannot be interpreted as activity or disclose hook input", () => {
-  const probe = { workspace: "A", sentAt: 1000, kind: "probe", challenge: "b".repeat(32) } as const;
-  const packet = sealDiagnostic(probe, token);
-  assert.deepEqual(acceptDiagnostic(packet, keys, 1000), probe);
-  assert.equal(acceptDiagnostic(packet, keys, 11_001), null);
-  assert.equal(acceptDiagnostic(sealDiagnostic({ ...probe, workspace: "B" }, token), keys, 1000), null);
-  assert.equal(acceptObservation(packet, keys, 1000), null);
-  assert.equal(acceptDiagnostic(sealDiagnostic({ ...probe, raw: "private" } as typeof probe, token), keys, 1000), null);
-});
-
-test("native review command preserves spaces and quotes without trusting anything", () => {
+test("generated hooks contain eight fixed invocations without an endpoint or capability", () => {
+  const parsed = JSON.parse(hookConfig(helper, "A", root, system));
+  assert.deepEqual(Object.keys(parsed.hooks), Object.keys(hookEvents));
+  for (const event of Object.keys(hookEvents)) {
+    const [group] = parsed.hooks[event];
+    assert.equal(group.hooks.length, 1);
+    const row = group.hooks[0];
+    assert.equal(row.timeout, 2);
+    assert.equal(row.type, "command");
+    assert.equal(row.command, `${system}\\cmd.exe /D /V:OFF /C CALL "${helper}" hook A "${root}" ${event}`);
+  }
+  for (const unsafe of [`${root}\\..\\other`, `${root}&other`, `${root}'x`, `${root}%TMP%`, "relative"]) {
+    assert.throws(() => hookConfig(helper, "A", unsafe, system), /Unsupported Windows hook path/);
+  }
+  assert.throws(() => hookConfig("C:\\Windows\\System32\\cmd.exe", "A", root, system), /Unsupported Windows hook command/);
+  assert.throws(() => hookConfig(helper, "B", root, system), /Unsupported Windows hook location/);
   assert.equal(reviewCommand("C:\\Program Files\\codex.exe", "C:\\O'Brien's demo"),
     "& 'C:\\Program Files\\codex.exe' --cd 'C:\\O''Brien''s demo'");
 });
 
-test("two synthetic hook processes send distinct observations over loopback", { timeout: 5000 }, async (t) => {
-  const socket = createSocket("udp4");
-  socket.bind(0, "127.0.0.1");
-  await once(socket, "listening");
-  t.after(() => socket.close());
-  const port = socket.address().port;
-  const observations: string[] = [];
-  const diagnostics: string[] = [];
-  socket.on("message", (raw) => {
-    assert.doesNotMatch(raw.toString(), /canary|session-raw/);
-    const event = acceptObservation(raw, keys);
-    if (event) observations.push(event.session);
-    const diagnostic = acceptDiagnostic(raw, keys);
-    if (diagnostic) diagnostics.push(diagnostic.kind);
+test("validates fresh activity and diagnostics separately", () => {
+  const probe = { workspace: "A", sentAt: 1000, kind: "probe", challenge: "b".repeat(32) };
+  assert.deepEqual(readDiagnostic(probe, 1000), probe);
+  assert.equal(readDiagnostic(probe, 11_001), null);
+  assert.equal(readObservation(probe, 1000), null);
+  assert.equal(readDiagnostic({ ...probe, raw: "private" }, 1000), null);
+  const activity = makeEvent("PreToolUse", 1000);
+  assert.deepEqual(readObservation(activity, 1000), activity);
+  assert.equal(readObservation(activity, 11_001), null);
+  assert.equal(readObservation({ ...activity, tool: null }, 1000), null);
+  assert.equal(readObservation({ ...activity, raw: "private" }, 1000), null);
+});
+
+async function exchange(port: number, key: Buffer, workspace: HookWorkspace, payload: string, replay?: Buffer) {
+  const socket = connect({ port, host: "127.0.0.1" });
+  socket.on("error", () => {}); // Closing an unauthenticated peer may reset the test socket.
+  socket.setTimeout(1500, () => socket.destroy());
+  let data = Buffer.alloc(0);
+  let recorded: Buffer | undefined;
+  let stage = 0;
+  let hello: Buffer;
+  return new Promise<{ ack: number; recorded?: Buffer }>((resolve) => {
+    socket.on("close", () => resolve({ ack: stage === 2 ? data[0] ?? -1 : -1, recorded }));
+    socket.on("data", (chunk: Buffer) => {
+      data = Buffer.concat([data, chunk]);
+      if (stage === 0 && data.length >= 16) {
+        const client = Buffer.concat([Buffer.from(workspace), randomBytes(16)]);
+        hello = Buffer.concat([data.subarray(0, 16), client]);
+        data = data.subarray(16);
+        stage = 1;
+        socket.write(client);
+      }
+      if (stage === 1 && data.length >= 32) {
+        if (!timingSafeEqual(data.subarray(0, 32), hookProof(key, "server", hello))) { socket.destroy(); return; }
+        data = data.subarray(32);
+        stage = 2;
+        const body = Buffer.from(payload);
+        const header = Buffer.alloc(2);
+        header.writeUInt16BE(body.length);
+        const frame = Buffer.concat([header, body]);
+        recorded = Buffer.concat([frame, hookProof(key, "frame", hello, frame)]);
+        socket.write(replay ?? recorded);
+      }
+    });
   });
-  await Promise.all([
-    invoke(JSON.stringify(input), port),
-    invoke(JSON.stringify(input), port, "PreToolUse", "B"),
-    invoke("{malformed", port),
-    invoke("x".repeat(maxHookBytes + 1), port),
-  ]);
-  assert.equal(observations.length, 2);
-  assert.equal(new Set(observations).size, 2);
-  assert.deepEqual(diagnostics, ["unsupported-input", "unsupported-input"]);
-});
+}
 
-test("a configured workspace cannot attribute events from a different directory", { timeout: 5000 }, async (t) => {
-  const socket = createSocket("udp4");
-  socket.bind(0, "127.0.0.1");
-  await once(socket, "listening");
-  t.after(() => socket.close());
-  const port = socket.address().port;
-  const received = once(socket, "message");
-  const child = spawn(process.execPath, [script, String(port), token, "A", "PreToolUse", join(process.cwd(), "another-workspace")],
-    { stdio: ["ignore", "ignore", "ignore"] });
-  const [[message], [code]] = await Promise.all([received, once(child, "close")]);
-  assert.equal(code, 0);
-  assert.equal(acceptObservation(message, keys), null);
-  assert.equal(acceptDiagnostic(message, keys)?.kind, "wrong-workspace");
-});
-
-test("workspace reducer handles concurrent tools, missed starts, duplicates, and terminal evidence", () => {
+test("authenticated delivery is bounded, acknowledged, scoped, and resists replay and stale keys", { timeout: 5000 }, async () => {
+  const keys = { A: randomBytes(32), B: randomBytes(32) };
   const timeline = new HookTimeline();
-  const event = (name: string, at: number, tool = "tool-raw", workspace: "A" | "B" = "A") =>
-    projectHook({ ...input, hook_event_name: name, tool_use_id: tool }, keys[workspace], workspace, at)!;
-  const a = event("PreToolUse", 1000);
-  const b = event("PreToolUse", 1001, "another", "B");
+  const accept = (workspace: HookWorkspace, raw: unknown) => {
+    const now = Date.now();
+    const event = readObservation(raw, now);
+    return event?.workspace === workspace && timeline.observe(event, now);
+  };
+  const listener = await listenForHooks(keys, accept, () => assert.fail("unexpected server error"));
+  const event = makeEvent("PreToolUse", Date.now());
+  const payload = JSON.stringify(event);
+  try {
+    const [a, b] = await Promise.all([
+      exchange(listener.port, keys.A, "A", payload),
+      exchange(listener.port, keys.B, "B", JSON.stringify(makeEvent("PreModelRequest", Date.now(), "", "B"))),
+    ]);
+    assert.equal(a.ack, 1);
+    assert.equal(b.ack, 1);
+    assert.deepEqual(timeline.states(Date.now()).map(({ workspace }) => workspace).sort(), ["A", "B"]);
+    assert.equal((await exchange(listener.port, keys.A, "A", payload, a.recorded)).ack, -1);
+    assert.equal((await exchange(listener.port, keys.A, "A", payload)).ack, 0, "same event ID is rejected even on a different connection");
+    assert.equal((await exchange(listener.port, keys.B, "A", payload)).ack, -1);
+    assert.equal((await exchange(listener.port, keys.B, "B", payload)).ack, 0, "a scoped key cannot publish another workspace's event");
+    assert.equal((await exchange(listener.port, keys.A, "A", "{")).ack, 0);
+    assert.equal((await exchange(listener.port, keys.A, "A", " ".repeat(1025))).ack, -1);
+    assert.equal((await exchange(listener.port, keys.A, "A", JSON.stringify({ ...event, sentAt: Date.now() - 11_000 }))).ack, 0);
+  } finally { await listener.close(); }
+  const replacement = await listenForHooks({ A: randomBytes(32), B: randomBytes(32) }, accept, () => {});
+  try {
+    assert.equal((await exchange(listener.port, keys.A, "A", payload)).ack, -1);
+    assert.equal((await exchange(replacement.port, keys.A, "A", payload)).ack, -1);
+  } finally { await replacement.close(); }
+});
+
+test("workspace reducer handles concurrent tools, missing starts, duplicates and terminal evidence", () => {
+  const timeline = new HookTimeline();
+  const a = makeEvent("PreToolUse", 1000);
+  const b = makeEvent("PreToolUse", 1001, "other", "B");
   assert.equal(timeline.observe(a, 1001), true);
   assert.equal(timeline.observe(a, 1001), false);
   timeline.observe(b, 1001);
-  const second = projectHook({ ...input, session_id: "other-conversation" }, token, "A", 1002)!;
+  const second = makeEvent("PreToolUse", 1002, "", "A", "other-conversation");
   timeline.observe(second, 1002);
-  timeline.observe(event("PostToolUse", 1200, "tool-late"), 1200);
-  assert.equal(timeline.observe(event("PreToolUse", 1100, "tool-late"), 1201), false);
-  timeline.observe(event("PostToolUse", 1202), 1202);
+  timeline.observe(makeEvent("PostToolUse", 1200, "tool-late"), 1200);
+  assert.equal(timeline.observe(makeEvent("PreToolUse", 1100, "tool-late"), 1201), false);
+  timeline.observe(makeEvent("PostToolUse", 1202), 1202);
   assert.equal(timeline.state("A", a.session, 1210), "unknown");
   assert.equal(timeline.state("A", second.session, 1210), "working");
   assert.equal(timeline.state("B", b.session, 1210), "working");
-  timeline.observe(event("Interrupt", 1250), 1250);
+  timeline.observe(makeEvent("Interrupt", 1250), 1250);
   assert.equal(timeline.state("A", a.session, 1250), "interrupted");
-  assert.equal(timeline.observe(event("PreToolUse", 1240, "late"), 1251), false);
+  assert.equal(timeline.observe(makeEvent("PreToolUse", 1240, "late"), 1251), false);
   assert.equal(timeline.state("B", b.session, 17_000), "stale");
-  const laterTurn = projectHook({ ...input, hook_event_name: "Stop", turn_id: "next-turn" }, token, "A", 20000)!;
-  timeline.observe(laterTurn, 20000);
-  assert.equal(timeline.observe(event("PreToolUse", 21000, "late-invocation"), 21000), false);
+  timeline.observe(makeEvent("Stop", 20_000, "", "A", "session", "next-turn"), 20_000);
+  assert.equal(timeline.observe(makeEvent("PreToolUse", 21_000), 21_000), false);
 });
 
-test("missing close events go stale and recovery requires new session evidence after confirmed disconnect", async () => {
+test("termination goes stale and explicit recovery accepts new session evidence", () => {
   const timeline = new HookTimeline();
-  const send = (hook_event_name: string, sentAt: number, more = {}) =>
-    projectHook({ ...input, hook_event_name, ...more }, token, "A", sentAt)!;
-  const start = send("PreToolUse", 1000);
+  const start = makeEvent("PreToolUse", 1000);
   timeline.observe(start, 1000);
-  assert.equal(timeline.state("A", start.session, 16000), "stale");
-  timeline.observe(send("SessionEnd", 17000), 17000);
-  assert.equal(timeline.state("A", start.session, 18000), "disconnected");
-  assert.equal(timeline.observe(send("PreToolUse", 17500), 18000), false);
-  timeline.observe(send("SessionStart", 18100, { source: "resume" }), 18100);
-  assert.equal(timeline.state("A", start.session, 18100), "unknown");
-  timeline.observe(send("PreToolUse", 18101), 18101);
-  timeline.observe(send("Stop", 18102), 18102);
-  assert.equal(timeline.state("A", start.session, 18102), "unknown");
-  await invoke("{malformed", 9, "Stop");
+  assert.equal(timeline.state("A", start.session, 16_000), "stale");
+  timeline.observe(makeEvent("SessionEnd", 17_000), 17_000);
+  assert.equal(timeline.state("A", start.session, 18_000), "disconnected");
+  assert.equal(timeline.observe(makeEvent("PreToolUse", 17_500), 18_000), false);
+  timeline.observe(makeEvent("SessionStart", 18_100), 18_100);
+  assert.equal(timeline.state("A", start.session, 18_100), "unknown");
+  timeline.observe(makeEvent("PreToolUse", 18_101), 18_101);
+  assert.equal(timeline.state("A", start.session, 18_101), "working");
+  timeline.observe(makeEvent("Stop", 18_102), 18_102);
+  assert.equal(timeline.state("A", start.session, 18_102), "unknown");
 });
 
-test("model-only work expires, a post result is not a task outcome, and Stop permits continuation", () => {
+test("model-only work expires, and Stop permits a continued turn", () => {
   const timeline = new HookTimeline();
-  const send = (hook_event_name: string, sentAt: number) =>
-    projectHook({ ...input, hook_event_name, status: "failed", error: "model-error-canary" }, token, "A", sentAt)!;
-  const before = send("PreModelRequest", 1000);
-  assert.doesNotMatch(sealObservation(before, token).toString(), /canary|failed/);
+  const before = makeEvent("PreModelRequest", 1000);
   timeline.observe(before, 1000);
   assert.equal(timeline.aggregate(1000), "working");
-  timeline.observe(send("PostModelRequest", 1200), 1200);
+  timeline.observe(makeEvent("PostModelRequest", 1200), 1200);
   assert.equal(timeline.aggregate(1200), "unknown");
-  assert.equal(timeline.observe(send("PreModelRequest", 1100), 1300), false);
-  timeline.observe(send("Stop", 1300), 1300);
-  assert.equal(timeline.observe(send("PreModelRequest", 1400), 1400), true);
+  assert.equal(timeline.observe(makeEvent("PreModelRequest", 1100), 1300), false);
+  timeline.observe(makeEvent("Stop", 1300), 1300);
+  assert.equal(timeline.observe(makeEvent("PreModelRequest", 1400), 1400), true);
   assert.equal(timeline.aggregate(1400), "working");
-  assert.equal(timeline.aggregate(16400), "stale");
+  assert.equal(timeline.aggregate(16_400), "stale");
 });

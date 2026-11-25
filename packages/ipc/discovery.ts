@@ -16,12 +16,15 @@ export async function windowsEndpoint(action: Action, endpoint?: Endpoint, testN
   return value;
 }
 
-export async function privateActivityRoot(): Promise<string> {
+export async function privateActivityRoot(): Promise<{ root: string; system: string }> {
   const run = nonce().slice(0, 32);
   const text = await windowsDiscovery("activity", run);
-  const path = Buffer.from(text, "base64").toString("utf8");
-  if (!isAbsolute(path) || basename(path) !== `Pawmetry-activity-${run}`) throw new Error("Private activity storage unavailable");
-  return path;
+  const { root, system } = JSON.parse(Buffer.from(text, "base64").toString("utf8"));
+  if (typeof root !== "string" || !isAbsolute(root) || basename(root) !== `Pawmetry-activity-${run}`
+    || typeof system !== "string" || !isAbsolute(system) || basename(system).toLowerCase() !== "system32") {
+    throw new Error("Private activity storage unavailable");
+  }
+  return { root, system };
 }
 
 async function windowsDiscovery(action: Action | "activity", namespace?: string, input?: string): Promise<string> {

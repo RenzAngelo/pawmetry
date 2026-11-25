@@ -1,31 +1,25 @@
-import { join, win32 } from "node:path";
-import { fileURLToPath } from "node:url";
-import type { HookName } from "./protocol.ts";
+import { win32 } from "node:path";
+import { hookEvents, type HookName, type HookWorkspace } from "./protocol.ts";
 
-// The same literal command must parse under native Windows PowerShell and cmd.exe.
+// The fixed command must survive both of Codex's supported Windows shells.
+// Reject paths containing shell metacharacters instead of interpolating escaping rules.
 const literal = (path: string) => {
-  if (!/^[a-z]:[\\/]/i.test(path) || /["%$`!\u0000-\u001f]/.test(path)) throw new Error("Unsupported hook path");
+  if (!/^[a-z]:\\/i.test(path) || win32.normalize(path) !== path || /['"%$\x60!&|<>^();:\u0000-\u001f]/.test(path.slice(2))) {
+    throw new Error("Unsupported Windows hook path");
+  }
   return `"${path}"`;
 };
 
-export function hookInvocation(executable: string, port: number, key: string, workspace: "A" | "B", event: HookName,
-  electron: boolean, root: string, probe?: string) {
-  const system = process.env.SystemRoot ?? "C:\\Windows";
-  const shell = win32.join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  // A quoted executable is an expression in PowerShell and is not invoked.
-  if (!/^[a-z]:[\\/][\w.\\:/-]+$/i.test(shell)) throw new Error("Unsupported Windows system path");
-  const launcher = fileURLToPath(new URL("./windows-hook.ps1", import.meta.url));
-  const helper = fileURLToPath(new URL("./hook.ts", import.meta.url));
-  const args = ["-NoProfile", "-NonInteractive", "-File", launcher, executable, helper,
-    electron ? "electron" : "node", String(port), key, workspace, event, root, ...(probe ? [probe] : [])];
-  const command = [shell, ...args.map((arg, i) => [3, 4, 5, 11].includes(i) ? literal(arg) : arg)].join(" ");
-  return { shell, args, command };
-}
-
-export function withinWorkspace(root: string, cwd: string) {
-  const pathApi = process.platform === "win32" ? win32 : null;
-  const comparable = (path: string) => pathApi ? pathApi.resolve(path).toLowerCase() : path;
-  const expected = comparable(root);
-  const actual = comparable(cwd);
-  return actual === expected || actual.startsWith(join(expected, "_").slice(0, -1));
+export function hookCommand(executable: string, workspace: HookWorkspace, event: HookName, root: string, system: string) {
+  const shell = win32.join(system, "cmd.exe");
+  const parent = win32.dirname(root);
+  if (!/^[a-z]:\\[\w.\\-]+$/i.test(shell)
+    || !/^PawmetryActivity-[a-f0-9]{64}\.exe$/.test(win32.basename(executable))
+    || !["A", "B"].includes(workspace) || !Object.hasOwn(hookEvents, event)) throw new Error("Unsupported Windows hook command");
+  const path = literal(root);
+  if (win32.dirname(executable) !== parent || win32.basename(root) !== `workspace-${workspace.toLowerCase()}`
+    || !/^Pawmetry-activity-[a-f0-9]{32}$/.test(win32.basename(parent))) throw new Error("Unsupported Windows hook location");
+  // CALL avoids cmd.exe stripping the first and last quotes from a /C payload.
+  // Environment expansion and shell metacharacters were rejected above.
+  return `${shell} /D /V:OFF /C CALL ${literal(executable)} hook ${workspace} ${path} ${event}`;
 }

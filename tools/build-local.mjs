@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildActivityHelper } from "./build-activity-helper.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const here = (file) => join(root, file);
@@ -43,11 +44,16 @@ await copy([
   "apps/desktop/menu-window.mjs", "apps/desktop/menu-preload.cjs", "apps/desktop/menu.html", "apps/desktop/menu.js", "apps/desktop/menu.css",
   "packages/telemetry/quota-manager.ts", "tools/codex-quota-probe/app-server.ts",
   "tools/codex-quota-probe/discovery.ts", "tools/codex-quota-probe/quota.ts", "tools/codex-quota-probe/telemetry.ts",
-  "tools/codex-activity-probe/hook.ts", "tools/codex-activity-probe/protocol.ts",
+  "tools/codex-activity-probe/helper.ts", "tools/codex-activity-probe/protocol.ts", "tools/codex-activity-probe/transport.ts",
   "tools/codex-activity-probe/receiver.ts", "tools/codex-activity-probe/timeline.ts",
-  "tools/codex-activity-probe/windows-hook.ps1", "tools/codex-activity-probe/windows-command.ts",
+  "tools/codex-activity-probe/windows-command.ts",
   "THIRD_PARTY_NOTICES.md",
 ], desktopApp);
+if (process.argv.includes("--package")) {
+  buildActivityHelper(join(desktopApp, "tools", "codex-activity-probe"));
+  await cp(here(".cache/go-sdk/go/LICENSE"), join(desktopApp, "LICENSE.go"));
+  await cp(here(".cache/go-sdk/go/PATENTS"), join(desktopApp, "PATENTS.go"));
+}
 await writeFile(join(desktopApp, "package.json"),
   JSON.stringify({ name: "pawmetry", productName: "Pawmetry", version, type: "module", main: "apps/desktop/main.mjs", private: true }));
 const fingerprint = createHash("sha256");

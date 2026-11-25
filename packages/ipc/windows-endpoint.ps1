@@ -49,7 +49,8 @@ try {
     if (![IO.Directory]::Exists($directory)) { exit 0 }
     Assert-Private $directory $true
     if ($Action -eq 'activity') {
-        [Console]::Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($directory)))
+        $location = ConvertTo-Json -Compress -InputObject @{ root = $directory; system = [Environment]::SystemDirectory }
+        [Console]::Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($location)))
         exit 0
     }
     if ($Action -ne 'read') {

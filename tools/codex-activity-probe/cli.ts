@@ -20,7 +20,9 @@ async function run() {
   }, 1000);
   console.log(`Disposable activity workspace A: ${receiver.paths.A}`);
   console.log(`Disposable activity workspace B: ${receiver.paths.B}`);
-  console.log("Review the project hooks in Codex before testing. Close the disposable windows before pressing Ctrl+C.");
+  console.log(receiver.identity === "standard"
+    ? "Review this exact helper and definition before native approval. Close the disposable windows before pressing Ctrl+C."
+    : "Native activity is blocked under this Windows token. Keep the hooks pending. Press Ctrl+C to clean up.");
   process.once("SIGINT", stop);
   await done;
   clearInterval(timer);

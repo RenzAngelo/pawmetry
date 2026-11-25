@@ -1,7 +1,7 @@
 import { screen } from "electron";
 import { fileURLToPath } from "node:url";
 import { localWindow } from "./local-window.mjs";
-import { fitBounds } from "./preferences.ts";
+import { placeCompanionMenu } from "./preferences.ts";
 
 const page = new URL("./menu.html", import.meta.url);
 const preload = fileURLToPath(new URL("./menu-preload.cjs", import.meta.url));
@@ -37,10 +37,7 @@ export function createCompanionMenu(visibility) {
     if (!await loading || current !== generation || opened.isDestroyed() || pet.isDestroyed() || !pet.isVisible()) return;
     const anchor = pet.getBounds();
     const area = screen.getDisplayMatching(anchor).workArea;
-    const height = Math.min(388, area.height);
-    const below = anchor.y + Math.min(67, anchor.height);
-    const y = below + height <= area.y + area.height ? below : anchor.y - height + 16;
-    const target = fitBounds({ x: anchor.x + anchor.width - 256, y, width: 256, height }, area);
+    const target = placeCompanionMenu(anchor, area);
     const previous = opened.getBounds();
     if (previous.width > target.width || previous.height > target.height) {
       opened.setMinimumSize(Math.min(previous.width, target.width), Math.min(previous.height, target.height));

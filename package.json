@@ -17,6 +17,7 @@
     "desktop:smoke-lock": "node tools/test-desktop-lock.mjs",
     "vscode:smoke-ipc": "node tools/test-vscode-ipc.ts",
     "build:local": "node tools/build-local.mjs",
+    "build:activity-helper": "node tools/build-activity-helper.mjs --development",
     "package:local": "node tools/build-local.mjs --package",
     "test": "node --test tests/*.test.ts"
   },

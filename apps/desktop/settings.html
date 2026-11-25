@@ -103,7 +103,9 @@
         <div id="workspace-instructions" hidden>
           <ol>
             <li>Run <strong>Check files and receiver</strong>. The synthetic check never drives the pet.</li>
-            <li>Copy the Codex review command for that folder. Run it in Windows PowerShell, then type <code>/hooks</code> in the Codex terminal. Review only the Pawmetry entries for that disposable folder, and approve them if you agree.</li>
+          </ol>
+          <ol id="native-activity-steps" start="2">
+            <li>After security review of this exact build, use the copied command in Windows PowerShell. Type <code>/hooks</code> in the Codex terminal and review only the Pawmetry entries for this disposable folder.</li>
             <li>Use <strong>Open in VS Code</strong>. Try a model-only turn after approval. A matching file and a passing transport check cannot confirm native approval.</li>
           </ol>
           <p id="codex-review-status" role="status" hidden></p>

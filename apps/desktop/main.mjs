@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, screen, Tray } from "electron";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import { askStatus, listenStatus } from "../../packages/ipc/transport.ts";
 import { nonce } from "../../packages/ipc/protocol.ts";
 import { resetText } from "../../packages/telemetry/time-display.ts";
 import { animationStyle, motionFor } from "../../packages/animation/animation.ts";
-import { dimensions, fitBounds, loadPreferences, modes, savePreferences, shortcuts, sizes } from "./preferences.ts";
+import { dimensions, fitBounds, loadPreferences, modes, placeCompanionMenu, savePreferences, shortcuts, sizes } from "./preferences.ts";
 import { alertKinds, quotaAlerts } from "./quota-alerts.ts";
 import { prepareReceiver } from "../../tools/codex-activity-probe/receiver.ts";
 import { discoverCodex } from "../../tools/codex-quota-probe/discovery.ts";
@@ -140,7 +140,7 @@ async function setActivity(enabled) {
   retainedActivityPaths = [];
   activityChecks = {};
   activityTransport = {};
-  activityTask = prepareReceiver({ electron: true, onChange: paint, onError: () => {
+  activityTask = prepareReceiver({ packaged: app.isPackaged, onChange: paint, onError: () => {
     if (activityReceiver) void setActivity(false).then(() => {
       activityIssue = ["The local receiver stopped unexpectedly.", activityIssue].filter(Boolean).join(" ");
       paint();
@@ -152,7 +152,7 @@ async function setActivity(enabled) {
     activityReceiver.setPaused(monitoringPaused);
     activityChecks = { A: "present", B: "present" };
   } catch {
-    activityIssue = "The disposable receiver could not start. Check Windows PowerShell policy and local application data access.";
+    activityIssue = "The disposable receiver could not start. Use a complete Windows package and check local application data access.";
   } finally {
     activityTask = undefined;
     paint();
@@ -178,10 +178,12 @@ function activityStatus(status) {
     configuration: activityChecks[row.label] ?? "unchecked", transport: activityTransport[row.label] ?? "unchecked" })) ?? [];
   const observed = workspaces.some(({ seen }) => seen);
   const expired = workspaces.some(({ last, states }) => last && states.length === 0);
-  const state = activityStopping ? "stopping" : activityTask ? "starting" : monitoringPaused ? "paused" : !activityReceiver ? "unconfigured"
+  const securityBlocked = activityReceiver?.identity === "restricted";
+  const state = activityStopping ? "stopping" : activityTask ? "starting" : securityBlocked ? "security-blocked"
+    : monitoringPaused ? "paused" : !activityReceiver ? "unconfigured"
     : !observed ? "review" : status.activity === "unknown" ? (expired ? "stale" : "no-active-sessions") : status.activity;
   return { state, workspaces, issue: activityIssue, retainedPaths: retainedActivityPaths, available: process.platform === "win32",
-    checking: activityChecking, hasReviewCommand: !!codexExecutable };
+    checking: activityChecking, hasReviewCommand: !securityBlocked && !!codexExecutable, securityBlocked };
 }
 
 function settingsState() {
@@ -341,7 +343,8 @@ async function smokeControls(menu) {
   await until(() => preferences.mode === "pet", "options changed display mode and native bounds");
   assert.deepEqual(window.getSize(), [...dimensions.pet[preferences.windowSizes.pet]]);
   const smallPopup = await openOptions();
-  assert.deepEqual(fitBounds(smallPopup.getBounds(), screen.getDisplayMatching(smallPopup.getBounds()).workArea), smallPopup.getBounds());
+  const anchor = window.getBounds();
+  assert.deepEqual(smallPopup.getBounds(), placeCompanionMenu(anchor, screen.getDisplayMatching(anchor).workArea));
   await press(smallPopup, '[data-command="mode-dashboard"]');
   await until(() => preferences.mode === "dashboard" && !smallPopup.isVisible(), "pet-only options restored dashboard");
   selectMode("dashboard");
@@ -425,15 +428,16 @@ async function smokeActivity() {
   await panel.webContents.executeJavaScript(`document.querySelector('nav [data-section="advanced"]').click()`);
   await panel.webContents.executeJavaScript("document.querySelector('#start-activity').click()");
   await until(async () => activityReceiver && !activityTask && await panel.webContents.executeJavaScript(
-    "document.querySelector('#diagnostic-state').textContent === 'Native approval not verified'"), "Settings created two disposable workspaces and is awaiting events");
+    "['Native approval not verified', 'Native activity blocked by Windows privileges'].includes(document.querySelector('#diagnostic-state').textContent)"),
+  "Settings created two disposable workspaces and displays the native security status");
   const reviewControls = await panel.webContents.executeJavaScript(`(() => {
     const original = snapshot;
     const disabled = () => [...document.querySelectorAll('[data-review]')].map((button) => button.disabled);
     const status = document.querySelector('#codex-review-status');
     const retry = document.querySelector('#retry-codex-review');
-    function giveDiscovery(status, available) {
+    function giveDiscovery(status, available, securityBlocked = false) {
       render({ ...original, quota: 'offline', liveSelected: false, monitoringPaused: true,
-        codexInstall: { status }, activity: { ...original.activity, hasReviewCommand: available } });
+        codexInstall: { status }, activity: { ...original.activity, hasReviewCommand: available, securityBlocked } });
     }
     try {
       giveDiscovery('found', true);
@@ -441,7 +445,9 @@ async function smokeActivity() {
       giveDiscovery('missing', false);
       const missing = { disabled: disabled(), hint: status.textContent, canRetry: !retry.hidden && !retry.disabled };
       giveDiscovery('checking', false);
-      return { available, missing, waiting: !status.hidden && retry.disabled };
+      const waiting = !status.hidden && retry.disabled;
+      giveDiscovery('found', false, true);
+      return { available, missing, waiting, blocked: disabled().every(Boolean) && /Keep these hooks pending/.test(status.textContent) };
     } finally { render(original); }
   })()`);
   assert.deepEqual(reviewControls.available, { disabled: [false, false], hintHidden: true }, "both review buttons use discovery even in simulation when monitoring is paused");
@@ -449,8 +455,10 @@ async function smokeActivity() {
   assert.match(reviewControls.missing.hint, /could not find the Codex executable/);
   assert.equal(reviewControls.missing.canRetry, true);
   assert.equal(reviewControls.waiting, true);
+  assert.equal(reviewControls.blocked, true);
   const receiver = activityReceiver;
   assert.deepEqual(await receiver.checkConfigurations(), { A: "present", B: "present" });
+  assert.throws(() => closeSync(openSync(receiver.executable, "r+")), /EBUSY|EACCES|EPERM/, "active helper denies write opens");
   await panel.webContents.executeJavaScript("document.querySelector('#check-hooks').click()");
   await until(() => activityTransport.A === "passed" && activityTransport.B === "passed", "Settings self-test reached both workspace keys");
   assert.equal(receiver.aggregate(), "unknown", "diagnostic probes cannot animate the pet");
@@ -461,43 +469,37 @@ async function smokeActivity() {
     writeFileSync(configB, "{}");
     assert.deepEqual(await receiver.probe(), { A: "passed", B: "invalid-configuration" });
   } finally { writeFileSync(configB, originalConfig); }
-  async function deliver(folder, name) {
-    const command = JSON.parse(readFileSync(join(folder, ".codex", "hooks.json"), "utf8")).hooks[name][0].hooks[0].command;
+  async function checkHookCommand(folder) {
+    const command = JSON.parse(readFileSync(join(folder, ".codex", "hooks.json"), "utf8")).hooks.Stop[0].hooks[0].command;
     const system = join(process.env.SystemRoot, "System32");
     const useCmd = folder === receiver.paths.A;
     const shell = useCmd ? join(system, "cmd.exe") : join(system, "WindowsPowerShell", "v1.0", "powershell.exe");
     const argv = useCmd ? ["/D", "/S", "/C", `"${command}"`] : ["-NoProfile", "-NonInteractive", "-Command", command];
-    const child = spawn(shell, argv,
-      { cwd: folder, windowsVerbatimArguments: useCmd, windowsHide: true, stdio: ["pipe", "ignore", "ignore"], timeout: 4200 });
+    const start = performance.now();
+    const child = spawn(shell, argv, {
+      cwd: folder, windowsVerbatimArguments: useCmd, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], timeout: 2200,
+      // Exercise an ordinary Codex host shell with inherited startup variables.
+      env: { ...process.env, NODE_OPTIONS: "--pawmetry-invalid-node-flag", ELECTRON_RUN_AS_NODE: "1" },
+    });
+    let output = "";
+    let error = "";
+    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.stderr.on("data", (chunk) => { error += chunk; });
     child.stdin.on("error", () => {});
-    child.stdin.end(JSON.stringify({ hook_event_name: name, session_id: "fixture", turn_id: "fixture" }) + "\n");
+    child.stdin.end("{}"); // No valid event may enter the live timeline from this smoke.
     const [code] = await once(child, "close");
-    assert.equal(code, 0, "synthetic generated hook command exited successfully");
+    assert.equal(code, 0, error || "generated hook exited successfully");
+    assert.equal(output.trim(), "{}", "both shells run the standalone helper despite inherited Node startup settings");
+    assert.equal(error, "");
+    return Math.round(performance.now() - start);
   }
   try {
     window.hide();
-    await Promise.all(Object.values(receiver.paths).map((folder) => deliver(folder, "PreModelRequest")));
-    assert.deepEqual(receiver.states().map((item) => item.workspace).sort(), ["A", "B"]);
-    assert.equal(companionView().status.activity, "working");
-    await until(() => panel.webContents.executeJavaScript(
-      "document.querySelector('#diagnostic-state').textContent === 'Activity monitoring connected' && document.querySelectorAll('.workspace').length === 2"),
-    "work in both disposable folders reached Settings while the pet was hidden");
-    window.showInactive();
-    assert.match(await window.webContents.executeJavaScript("document.querySelector('#activity').textContent"), /working/);
-    await deliver(receiver.paths.A, "Interrupt");
-    assert.equal(companionView().status.activity, "working", "the other workspace is still working");
-    await deliver(receiver.paths.B, "PostModelRequest");
-    assert.equal(companionView().status.activity, "interrupted");
-    pauseMonitoring(true);
-    await deliver(receiver.paths.B, "PreModelRequest");
+    const durations = await Promise.all(Object.values(receiver.paths).map(checkHookCommand));
+    console.log(`Neutral generated hook through CMD and PowerShell took ${durations.join(" / ")} ms. Token is ${receiver.identity}.`);
     assert.equal(receiver.aggregate(), "unknown");
-    pauseMonitoring(false);
-    await deliver(receiver.paths.B, "PreModelRequest");
-    assert.equal(receiver.aggregate(), "working");
-    await deliver(receiver.paths.B, "PostModelRequest");
-    assert.equal(activityStatus(companionView().status).state, "no-active-sessions");
-    await deliver(receiver.paths.B, "SessionEnd");
-    assert.equal(activityStatus(companionView().status).state, "disconnected");
+    assert.deepEqual(await receiver.probe(), { A: "passed", B: "passed" }, "receiver diagnostics work with the pet hidden");
+    window.showInactive();
     await panel.webContents.executeJavaScript("document.querySelector('#stop-activity').click()");
     await until(() => !activityReceiver && !activityStopping, "Settings stopped the receiver");
     assert.ok(Object.values(receiver.paths).every((folder) => !existsSync(join(folder, ".codex", "hooks.json"))));
@@ -507,7 +509,7 @@ async function smokeActivity() {
     assert.deepEqual(await receiver.probe(), { A: "receiver-unavailable", B: "receiver-unavailable" });
     panel.close();
   }
-  console.log("Desktop activity ingress, concurrent synthetic hook commands, and renderer passed.");
+  console.log("Desktop activity safety gating, shell launches, acknowledged synthetic diagnostics, and cleanup passed.");
 }
 
 function trayIcon() {
@@ -742,7 +744,9 @@ function connectRendererIpc() {
       }
       case "review-A": case "review-B": {
         const receiver = activityReceiver;
-        if (receiver && codexExecutable) clipboard.writeText(reviewCommand(codexExecutable, receiver.paths[action === "review-A" ? "A" : "B"]));
+        if (receiver?.identity === "standard" && codexExecutable) {
+          clipboard.writeText(reviewCommand(codexExecutable, receiver.paths[action === "review-A" ? "A" : "B"]));
+        }
         break;
       }
       case "live-quota": case "simulate-quota": setLiveQuota(action === "live-quota"); break;
@@ -1023,8 +1027,11 @@ if (lockSmoke) {
     void Promise.allSettled([stopping, closingEndpoint, stoppingActivity, activityStopping]).then(() => app.quit());
   });
   app.on("will-quit", () => { clearInterval(timer); clearInterval(hitTimer); clearTimeout(viewportTimer); globalShortcut.unregisterAll(); tray?.destroy(); });
-  start().catch((error) => {
-    if (smoke) console.error(error);
+  start().catch(async (error) => {
+    if (smoke) {
+      console.error(error);
+      await activityReceiver?.close().catch(() => {});
+    }
     console.error("The Pawmetry simulation window could not start.");
     app.exit(1);
   });

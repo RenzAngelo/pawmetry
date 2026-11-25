@@ -95,6 +95,29 @@ export function fitBounds(bounds: Bounds, area: Bounds): Bounds {
   };
 }
 
+export function placeCompanionMenu(anchor: Bounds, area: Bounds): Bounds {
+  const width = Math.min(256, area.width);
+  const height = Math.min(388, area.height);
+  const gap = 8;
+  const candidates = [
+    { x: anchor.x + anchor.width + gap, y: anchor.y },
+    { x: anchor.x - width - gap, y: anchor.y },
+    { x: anchor.x + anchor.width - width, y: anchor.y - height - gap },
+    { x: anchor.x + anchor.width - width, y: anchor.y + anchor.height + gap },
+  ];
+  // First try the preferred sides with a gap, then choose the least overlap
+  // when a work area is too small to fit even one full side.
+  const separated = candidates.find(({ x, y }, index) => index < 2
+    ? x >= area.x && x + width <= area.x + area.width
+    : y >= area.y && y + height <= area.y + area.height);
+  if (separated) return fitBounds({ ...separated, width, height }, area);
+  const overlap = ({ x, y }: Bounds) =>
+    Math.max(0, Math.min(x + width, anchor.x + anchor.width) - Math.max(x, anchor.x)) *
+    Math.max(0, Math.min(y + height, anchor.y + anchor.height) - Math.max(y, anchor.y));
+  return candidates.map((point) => fitBounds({ ...point, width, height }, area)).reduce((best, next) =>
+    overlap(next) < overlap(best) ? next : best);
+}
+
 export function loadPreferences(path: string): Preferences {
   try {
     const bytes = readFileSync(path);

@@ -14,3 +14,7 @@ The desktop vendors 22 unmodified interface SVGs from `lucide-static` 0.468.0 un
 Before incorporating any dependency or asset, record its exact version or revision, source, license and required attribution. Review packaged dependencies and reproduce any required notices in both the desktop installer and the VSIX. Verify asset rights independently of repository license badges. Keep original artwork and sounds with an authorship and licensing record.
 
 Provider and editor names identify potential integrations. Pawmetry is independent. No affiliation, compatibility or endorsement is implied. The Pawmetry source license, name clearance and public publisher identity are pending.
+
+## Native activity helper
+
+The Windows portable build includes a standalone helper linked with the Go runtime and standard library. Their BSD-style license and patent grant ship as `LICENSE.go` and `PATENTS.go`. The helper has no third-party Go modules. [Go license](https://go.dev/LICENSE)

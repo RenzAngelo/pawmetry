@@ -15,4 +15,6 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm test
+      - run: powershell.exe -NoProfile -File tools/fetch-activity-sdk.ps1
+      - run: npm run build:activity-helper
       - run: npm run build:local

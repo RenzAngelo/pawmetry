@@ -1,68 +1,79 @@
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
-import { createSocket } from "node:dgram";
 import { lstat, mkdir, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { setTimeout as wait } from "node:timers/promises";
-import { acceptDiagnostic, acceptObservation, hookEvents, type HookName } from "./protocol.ts";
+import { hookEvents, readDiagnostic, readObservation, type HookName, type HookWorkspace } from "./protocol.ts";
 import { HookTimeline } from "./timeline.ts";
 import { privateActivityRoot } from "../../packages/ipc/discovery.ts";
-import { hookInvocation } from "./windows-command.ts";
+import { hookCommand } from "./windows-command.ts";
+import { installHelper, invokeHelper } from "./helper.ts";
+import { listenForHooks } from "./transport.ts";
 
 const labels = ["A", "B"] as const;
-export function hookConfig(executable: string, port: number, key: string, label: "A" | "B", electron: boolean, root: string) {
+export function hookConfig(executable: string, label: HookWorkspace, root: string, system: string) {
   return JSON.stringify({
     hooks: Object.fromEntries(Object.keys(hookEvents).map((name) => [name, [{
       ...(name === "SessionStart" ? { matcher: "startup|resume|fork" } : {}),
-      hooks: [{ type: "command", command: hookInvocation(executable, port, key, label, name as HookName, electron, root).command,
-        timeout: 3, statusMessage: "Pawmetry activity metadata" }],
+      hooks: [{ type: "command", command: hookCommand(executable, label, name as HookName, root, system),
+        timeout: 2, statusMessage: "Pawmetry activity metadata" }],
     }]])),
   }, null, 2);
 }
 
-export async function prepareReceiver({ electron = false, onChange = () => {}, onError = () => {} } = {}) {
-  const root = await privateActivityRoot();
+export async function prepareReceiver({ packaged = false, onChange = () => {}, onError = () => {} } = {}) {
+  const { root, system } = await privateActivityRoot();
   const paths = { A: join(root, "workspace-a"), B: join(root, "workspace-b") };
-  const keys = { A: randomBytes(32).toString("hex"), B: randomBytes(32).toString("hex") };
-  const socket = createSocket("udp4");
+  const keys = { A: randomBytes(32), B: randomBytes(32) };
+  const created = new Map<string, Buffer>();
+  let helper: Awaited<ReturnType<typeof installHelper>> | undefined;
+  let image: string | undefined;
+  let listener: Awaited<ReturnType<typeof listenForHooks>> | undefined;
   let timeline = new HookTimeline();
   let paused = false;
   let resumedAt = 0;
-  const created = new Map<string, string>();
-  const latest = new Map<"A" | "B", { at: number; event: string }>();
-  const seen = new Set<"A" | "B">();
-  const rejected = new Map<"A" | "B", "unsupported-input" | "wrong-workspace">();
-  const probes = new Map<string, { label: "A" | "B"; arrived: boolean }>();
-  let active = false;
   let closing: Promise<boolean> | undefined;
+  const latest = new Map<HookWorkspace, { at: number; event: string }>();
+  const seen = new Set<HookWorkspace>();
+  const rejected = new Map<HookWorkspace, "unsupported-input" | "wrong-workspace">();
+  const probes = new Map<string, HookWorkspace>();
+  const hookFile = (label: HookWorkspace) => join(paths[label], ".codex", "hooks.json");
   const directory = async (path: string) => {
     const info = await lstat(path);
     return info.isDirectory() && !info.isSymbolicLink();
   };
-  const configuration = async (file: string, expected: string) => {
+  async function configuration(file: string) {
     try {
-      if (!await directory(root) || !await directory(dirname(dirname(file))) || !await directory(dirname(file))) return "changed";
+      const expected = created.get(file);
+      const folder = dirname(file);
+      if (!expected || !await directory(root) || (folder !== root &&
+        (!await directory(dirname(folder)) || !await directory(folder)))) return "changed";
       const info = await lstat(file);
-      return info.isFile() && !info.isSymbolicLink() && info.size === Buffer.byteLength(expected)
-        && await readFile(file, "utf8") === expected ? "present" : "changed";
+      return info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && info.size === expected.length
+        && (await readFile(file)).equals(expected) ? "present" : "changed";
     } catch (error) {
       return (error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unavailable";
     }
-  };
+  }
+  async function write(file: string, data: Buffer) {
+    await writeFile(file, data, { flag: "wx" });
+    created.set(file, data);
+  }
   const close = () => closing ??= (async () => {
-    if (active) await new Promise<void>((resolve) => socket.close(() => resolve()));
-    active = false;
+    // Cut off authentication and drain clients before deleting any files.
+    await listener?.close();
+    keys.A.fill(0);
+    keys.B.fill(0);
+    await helper?.close();
     let clean = true;
-    // Remove only unchanged files produced for this run. Leave workspace content alone.
     for (const [file, expected] of created) {
       try {
-        const check = await configuration(file, expected);
+        const check = await configuration(file);
         if (check === "present") await unlink(file);
         else if (check !== "missing") clean = false;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") clean = false;
-      }
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") clean = false; }
+      finally { expected.fill(0); }
     }
+    try { if (image && await directory(root)) await unlink(image); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") clean = false; }
     const folders = Object.values(paths);
     for (const folder of [...folders.map((value) => join(value, ".codex")), ...folders, root]) {
       try { if (await directory(folder)) await rmdir(folder); } catch { /* Leave nonempty workspace content in place. */ }
@@ -71,73 +82,52 @@ export async function prepareReceiver({ electron = false, onChange = () => {}, o
   })();
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      socket.once("error", reject);
-      socket.bind(0, "127.0.0.1", () => {
-        socket.off("error", reject);
-        active = true;
-        resolve();
-      });
-    });
-    socket.on("error", onError);
-    socket.on("message", (message, remote) => {
-      if (closing || remote.address !== "127.0.0.1") return;
+    helper = await installHelper(root, packaged, (file) => { image = file; }, onError);
+    const { identity, path: executable, hash } = helper;
+    listener = await listenForHooks(keys, (label, message) => {
+      if (closing) return false;
       const now = Date.now();
-      const diagnostic = acceptDiagnostic(message, keys, now);
-      if (diagnostic) {
-        if (diagnostic.kind === "probe") {
-          const probe = probes.get(diagnostic.challenge);
-          if (probe?.label === diagnostic.workspace) probe.arrived = true;
-        } else if (!paused && diagnostic.sentAt >= resumedAt) {
-          rejected.set(diagnostic.workspace, diagnostic.kind);
-          onChange();
-        }
-        return;
+      const diagnostic = readDiagnostic(message, now);
+      if (diagnostic?.workspace === label && diagnostic.kind === "probe") {
+        return probes.get(diagnostic.challenge) === label && probes.delete(diagnostic.challenge);
       }
-      if (paused) return;
-      const observed = acceptObservation(message, keys, now);
-      if (observed && observed.sentAt >= resumedAt && timeline.observe(observed, now)) {
-        rejected.delete(observed.workspace);
-        latest.set(observed.workspace, { at: now, event: observed.event });
-        seen.add(observed.workspace);
+      if (identity !== "standard" || paused) return false;
+      if (diagnostic?.workspace === label && diagnostic.kind !== "probe" && diagnostic.sentAt >= resumedAt) {
+        rejected.set(label, diagnostic.kind);
         onChange();
+        return true;
       }
-    });
-    const port = socket.address().port;
+      const observed = readObservation(message, now);
+      if (observed?.workspace !== label || observed.sentAt < resumedAt || !timeline.observe(observed, now)) return false;
+      rejected.delete(label);
+      latest.set(label, { at: now, event: observed.event });
+      seen.add(label);
+      onChange();
+      return true;
+    }, onError);
     for (const label of labels) {
-      const config = hookConfig(process.execPath, port, keys[label], label, electron, paths[label]);
-      const folder = join(paths[label], ".codex");
-      await mkdir(folder, { recursive: true });
-      const file = join(folder, "hooks.json");
-      await writeFile(file, config, { flag: "wx" });
-      created.set(file, config);
+      const descriptor = Buffer.alloc(34);
+      descriptor.writeUInt16BE(listener.port);
+      keys[label].copy(descriptor, 2);
+      await write(join(root, `ingress-${label.toLowerCase()}.bin`), descriptor);
+      await mkdir(dirname(hookFile(label)), { recursive: true });
+      await write(hookFile(label), Buffer.from(hookConfig(executable, label, paths[label], system)));
     }
-    return { paths, close, states: (now = Date.now()) => timeline.states(now), aggregate: (now = Date.now()) => timeline.aggregate(now),
+    return { paths, executable, hash, identity, close,
+      states: (now = Date.now()) => timeline.states(now), aggregate: (now = Date.now()) => timeline.aggregate(now),
       async checkConfigurations() {
-        return Object.fromEntries(await Promise.all(labels.map(async (label) => {
-          const file = join(paths[label], ".codex", "hooks.json");
-          return [label, await configuration(file, created.get(file)!)];
-        })));
+        return Object.fromEntries(await Promise.all(labels.map(async (label) => [label, await configuration(hookFile(label))])));
       },
       async probe() {
         return Object.fromEntries(await Promise.all(labels.map(async (label) => {
-          if (!active || closing) return [label, "receiver-unavailable"];
-          const file = join(paths[label], ".codex", "hooks.json");
-          if (await configuration(file, created.get(file)!) !== "present") return [label, "invalid-configuration"];
+          if (closing) return [label, "receiver-unavailable"];
+          if (await configuration(hookFile(label)) !== "present") return [label, "invalid-configuration"];
           const challenge = randomBytes(16).toString("hex");
-          const state = { label, arrived: false };
-          probes.set(challenge, state);
+          probes.set(challenge, label);
           try {
-            const { shell, args } = hookInvocation(process.execPath, port, keys[label], label, "PreModelRequest", electron, paths[label], challenge);
-            const child = spawn(shell, args, { cwd: paths[label], windowsHide: true, stdio: ["pipe", "ignore", "ignore"], timeout: 4000 });
-            const code = await new Promise<number | null>((resolve) => {
-              child.once("error", () => resolve(null));
-              child.once("close", resolve);
-              child.stdin.on("error", () => {});
-              child.stdin.end(JSON.stringify({ hook_event_name: "PreModelRequest", session_id: "probe", turn_id: "probe" }));
-            });
-            if (!state.arrived && code === 0) await wait(200);
-            return [label, state.arrived ? "passed" : !active || closing ? "receiver-unavailable" : code === 0 ? "no-delivery" : "launch-failed"];
+            const code = await invokeHelper(executable, ["probe", label, paths[label], challenge], paths[label]);
+            if (code === 0 && !probes.has(challenge)) return [label, "passed"];
+            return [label, closing ? "receiver-unavailable" : code === null ? "launch-failed" : "no-delivery"];
           } finally { probes.delete(challenge); }
         })));
       },

@@ -111,6 +111,7 @@ const activityLabels = {
   starting: ["Preparing disposable workspaces", "Pawmetry is starting the local activity receiver."],
   stopping: ["Disconnecting activity", "Pawmetry is removing its unchanged disposable hook files."],
   review: ["Native approval not verified", "Codex loads project hooks only for trusted projects and skips unapproved hooks. Verify the two steps in native Codex even if the file and receiver checks pass."],
+  "security-blocked": ["Native activity blocked by Windows privileges", "Use a standard Windows account for both Pawmetry and Codex. Leave the generated hooks pending. Synthetic receiver checks and live quota are still available."],
   working: ["Activity monitoring connected", "Model or tool work was observed in an enrolled workspace."],
   "no-active-sessions": ["Activity monitoring connected", "No observable active sessions. Idle status and task outcome are unknown."],
   interrupted: ["Activity monitoring connected", "Codex reported an interruption in an observed session."],
@@ -219,7 +220,8 @@ function render(view) {
   byId("start-activity").disabled = activity.state === "starting" || activity.state === "stopping";
   byId("startup").hidden = !view.canSetStartup;
   byId("next-scenario").disabled = view.liveSelected || view.monitoringPaused;
-  const needsCodex = prepared && !activity.hasReviewCommand;
+  const securityBlocked = prepared && activity.securityBlocked;
+  const needsCodex = prepared && !activity.hasReviewCommand && !securityBlocked;
   const discoveryStatus = view.codexInstall.status;
   const reviewStatus = {
     unchecked: "Pawmetry needs to find one supported local Codex executable before it can copy the review command.",
@@ -229,8 +231,10 @@ function render(view) {
     unsupported: "Automatic Codex detection here requires the local Windows x64 VS Code bundle.",
   }[discoveryStatus];
   const status = byId("codex-review-status");
-  status.hidden = !needsCodex;
-  put(status, needsCodex ? reviewStatus ?? "The local Codex executable is not ready. Find Codex again to retry." : "");
+  status.hidden = !needsCodex && !securityBlocked;
+  put(status, securityBlocked ? "Review is unavailable in this Windows session. Keep these hooks pending."
+    : needsCodex ? reviewStatus ?? "The local Codex executable is not ready. Find Codex again to retry." : "");
+  byId("native-activity-steps").hidden = securityBlocked;
   const retry = byId("retry-codex-review");
   retry.hidden = !needsCodex || discoveryStatus === "unsupported";
   retry.disabled = discoveryStatus === "checking";

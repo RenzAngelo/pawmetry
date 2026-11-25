@@ -13,6 +13,10 @@
 
 ## Current implementation and open validation
 
+- **Hardened activity path.** The Windows helper is a standalone Go executable with no external Go modules. It enforces a standard-user token before reading native hook input. An independently hashed copy stays locked for the receiver lifetime. Current-logon files hold ephemeral workspace keys outside hook commands. Authenticated TCP acknowledges bounded events. Native discovery verified the same declaration hash after a referenced file changed and a different hash after the declaration changed. [Security model](SECURITY.md#hook-execution-and-limitations)
+- **Approval gate.** The current Windows account is restricted for native activity and UAC settings were left untouched. An isolated standard-user run and actual native IDE events are pending. Quota and synthetic receiver diagnostics remain available. Profile-wide and existing-project enrollment remain preview-only.
+- **Adaptive options menu.** The popup prefers right, then left, above and below within the monitor work area. If there is insufficient space on every side, it minimizes overlap. Automated layout and desktop smoke cover placement and keyboard dismissal. Physical mixed-DPI checks are pending.
+
 - **Workspace A security review (2026-11-26).** All eight pending entries referenced the running `900ffc285ce7` package and its IPv4 loopback receiver. The packaged helper and its imports matched the reviewed source. The handler projects bounded stdin JSON into authenticated event metadata and sends it locally. Approval is not recommended in this elevated setup. `EnableLUA` is `0`, the portable command targets mutable files, and the packaged Electron runtime enables Node environment options that the launcher inherits. Keep native trust pending. The receiver and hook file were left in place. [Codex hook trust](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks) · [Electron fuses](https://www.electronjs.org/docs/latest/tutorial/fuses)
 - **Always-on-top.** Showing Settings cleared the pet's native topmost flag while the renderer still showed the saved pin. The pet now keeps its own pin, and Settings temporarily goes above it only while focused. An isolated Windows smoke covers pin changes, Settings focus, menu opening, hide and restore, resizing, window replacement and restart. The active package was left running. Physical mixed-DPI and cross-monitor stacking are pending.
 
@@ -41,10 +45,6 @@
 
 ## Next steps
 
-1. Before native approval, harden inherited runtime options and verify the hook artifact and execution identity in a standard-user isolated Windows test. Keep the current Workspace A review pending. Then use native `/hooks` to review only the exact new definitions and check one real model event in Workspace A before proceeding to Workspace B. Build the pin fix for interactive testing when the current receiver can be retired.
+1. Verify the exact Windows package in an isolated **standard-user** session. Keep native trust pending on the current elevated account. After the standard-user check passes and the package is reviewed, follow the [one disposable workflow](README.md#test-codex-activity-in-disposable-workspaces), starting with a model-only turn in Workspace A. Proceed to Workspace B only after A produces a genuine event.
 2. If native activity passes, prepare a reviewable `.codex/hooks.json` addition and rollback for any requested existing project. Wait for separate approval before writing it or performing trust changes.
 3. Check physical monitors, native notifications, independent Windows logon isolation and startup if approved. A per-user installer, signing, publisher identity and project license remain release gates.
-
-## Backlog
-
-- Position the floating options menu to the right of the pet when it fits, with a left or other fallback within the active monitor's work area. Verify mixed-DPI scaling and pet overlap near each edge.
