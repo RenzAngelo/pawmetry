@@ -1,6 +1,16 @@
 const pose = document.querySelector("#pose");
 const put = (element, text) => { if (element.textContent !== text) element.textContent = text; };
 const commands = Object.fromEntries([...document.querySelectorAll("[data-command]")].map((button) => [button.dataset.command, button]));
+let viewport = "";
+function reportViewport() {
+  const current = `${innerWidth}:${innerHeight}`;
+  if (current === viewport) return;
+  viewport = current;
+  window.pawmetry.reportViewport(innerWidth, innerHeight);
+}
+window.addEventListener("resize", reportViewport);
+window.pawmetry.onViewportRequest(() => { viewport = ""; reportViewport(); });
+reportViewport();
 for (const [command, button] of Object.entries(commands)) {
   button.addEventListener("mousedown", (event) => { if (event.button === 0) event.preventDefault(); });
   button.addEventListener("click", () => { void window.pawmetry.command(command).catch(() => {}); });
@@ -14,6 +24,7 @@ const activityText = { unconfigured: "Activity not configured", starting: "Start
   disconnected: "Codex activity · disconnected", paused: "Activity monitoring paused",
   "no-active-sessions": "No observable active sessions" };
 window.pawmetry.onView(({ pet, motion, mode, quota, resets, notice, activity, observing, presentation }) => {
+  reportViewport();
   document.documentElement.dataset.theme = presentation.theme;
   document.documentElement.dataset.reducedMotion = String(presentation.reducedMotion);
   document.body.dataset.pose = pet.pose;

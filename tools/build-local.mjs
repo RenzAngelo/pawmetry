@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
+import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -38,16 +39,31 @@ await copy([
   "apps/desktop/renderer.js", "apps/desktop/style.css", "packages/animation/animation.ts",
   "apps/desktop/local-window.mjs", "apps/desktop/settings-window.mjs", "apps/desktop/settings-model.ts",
   "apps/desktop/settings-preload.cjs", "apps/desktop/settings.html", "apps/desktop/settings.js", "apps/desktop/settings.css",
-  "apps/desktop/activity-setup.ts", "apps/desktop/tokens.css",
+  "apps/desktop/activity-setup.ts", "apps/desktop/activity-client.ts", "apps/desktop/tokens.css",
   "apps/desktop/menu-window.mjs", "apps/desktop/menu-preload.cjs", "apps/desktop/menu.html", "apps/desktop/menu.js", "apps/desktop/menu.css",
   "packages/telemetry/quota-manager.ts", "tools/codex-quota-probe/app-server.ts",
   "tools/codex-quota-probe/discovery.ts", "tools/codex-quota-probe/quota.ts", "tools/codex-quota-probe/telemetry.ts",
   "tools/codex-activity-probe/hook.ts", "tools/codex-activity-probe/protocol.ts",
   "tools/codex-activity-probe/receiver.ts", "tools/codex-activity-probe/timeline.ts",
+  "tools/codex-activity-probe/windows-hook.ps1", "tools/codex-activity-probe/windows-command.ts",
   "THIRD_PARTY_NOTICES.md",
 ], desktopApp);
 await writeFile(join(desktopApp, "package.json"),
   JSON.stringify({ name: "pawmetry", productName: "Pawmetry", version, type: "module", main: "apps/desktop/main.mjs", private: true }));
+const fingerprint = createHash("sha256");
+const staged = (await readdir(desktopApp, { recursive: true, withFileTypes: true })).filter((item) => item.isFile())
+  .map((item) => join(item.parentPath, item.name)).sort();
+for (const file of staged) {
+  fingerprint.update(file.slice(desktopApp.length).replaceAll("\\", "/"));
+  fingerprint.update(createHash("sha256").update(await readFile(file)).digest());
+}
+let revision = "unversioned";
+try {
+  revision = execFileSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+} catch { /* Archives without Git still have a content fingerprint. */ }
+const buildInfo = { version, revision, fingerprint: fingerprint.digest("hex").slice(0, 12) };
+await writeFile(join(desktopApp, "build-info.json"), JSON.stringify(buildInfo) + "\n");
+console.log(`Desktop build ${version} ${revision} ${buildInfo.fingerprint}`);
 await copy(common, join(editor, "shared"));
 await writeFile(join(editor, "shared", "package.json"), '{"type":"module"}\n');
 await cp(here("apps/vscode/extension.cjs"), join(editor, "extension.cjs"));

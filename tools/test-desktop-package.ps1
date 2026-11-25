@@ -25,6 +25,9 @@ try {
     if (!(Select-String -LiteralPath $stdout -Pattern 'Desktop simulation renderer smoke passed.' -SimpleMatch)) {
         throw 'Packaged desktop did not report success.'
     }
+    if (!(Select-String -LiteralPath $stdout -Pattern 'Packaged build identity verified in About.' -SimpleMatch)) {
+        throw 'Packaged desktop did not verify its build identity.'
+    }
     'Packaged desktop simulation smoke passed.'
 } finally {
     $env:ELECTRON_RUN_AS_NODE = $prior

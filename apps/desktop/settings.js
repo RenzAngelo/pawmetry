@@ -110,7 +110,7 @@ const activityLabels = {
   unconfigured: ["Activity monitoring not configured", "Review whether to connect your local Codex profile or a single project."],
   starting: ["Preparing disposable workspaces", "Pawmetry is starting the local activity receiver."],
   stopping: ["Disconnecting activity", "Pawmetry is removing its unchanged disposable hook files."],
-  review: ["Native hook approval required", "The receiver is waiting for its first event. Use native Codex review to confirm approval. Approved hooks may still be waiting for an observable event."],
+  review: ["Native approval not verified", "Codex loads project hooks only for trusted projects and skips unapproved hooks. Verify the two steps in native Codex even if the file and receiver checks pass."],
   working: ["Activity monitoring connected", "Model or tool work was observed in an enrolled workspace."],
   "no-active-sessions": ["Activity monitoring connected", "No observable active sessions. Idle status and task outcome are unknown."],
   interrupted: ["Activity monitoring connected", "Codex reported an interruption in an observed session."],
@@ -119,7 +119,7 @@ const activityLabels = {
   paused: ["Activity monitoring paused", "Resume monitoring to accept new events."],
 };
 
-function workspaces(rows) {
+function workspaces(rows, hasReviewCommand) {
   const layout = byId("workspaces");
   if (layout.children.length !== rows.length || rows.some(({ path }, index) => layout.children[index]?.querySelector("input").value !== path)) {
     layout.replaceChildren(...rows.map(({ label, path }) => {
@@ -138,18 +138,38 @@ function workspaces(rows) {
       copy.textContent = "Copy path";
       copy.addEventListener("click", async () => { await action("copy-" + label); put(byId("settings-error"), "Workspace " + label + " folder path copied."); });
       pathRow.append(input, copy);
-      row.append(title, pathRow, document.createElement("p"));
+      const launch = document.createElement("button");
+      launch.type = "button";
+      launch.textContent = "Open in VS Code";
+      launch.addEventListener("click", () => action("open-" + label));
+      const review = document.createElement("button");
+      review.type = "button";
+      review.dataset.review = "true";
+      review.textContent = "Copy Codex review command";
+      review.addEventListener("click", async () => {
+        await action("review-" + label);
+        put(byId("settings-error"), "Paste the command into Windows PowerShell, then type /hooks inside Codex.");
+      });
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      actions.append(launch, review);
+      row.append(title, pathRow, actions, document.createElement("p"));
       return row;
     }));
   }
-  rows.forEach(({ last, states, seen, configuration }, index) => {
+  rows.forEach(({ last, states, seen, configuration, transport, rejected }, index) => {
     const config = { present: "Hook file matches", changed: "Hook file changed", missing: "Hook file missing", unavailable: "Hook file unreadable" }[configuration] ?? "Hook file unchecked";
     const evidence = !last ? (seen ? "Waiting for a new event" : "No events received")
       : states.includes("working") ? "Working observed" : states.includes("interrupted") ? "Interruption observed"
       : states.length && states.every((state) => state === "disconnected") ? "Session closure observed"
       : states.length === 0 || states.includes("stale") ? "Stale · current state unknown" : "Outcome unknown";
     const timestamp = last ? ` · Last ${last.event.replaceAll("-", " ")} at ${new Date(last.at).toLocaleTimeString()}` : "";
-    put(layout.children[index].querySelector("p"), [config, evidence].join(" · ") + timestamp);
+    const result = { passed: "Synthetic delivery passed", "launch-failed": "Local hook launcher failed",
+      "no-delivery": "Synthetic delivery failed", "receiver-unavailable": "Receiver unavailable",
+      "invalid-configuration": "Saved hook differs from this run" }[transport];
+    const input = { "wrong-workspace": "Hook ran outside this workspace", "unsupported-input": "Hook ran, but Codex supplied an unsupported event payload" }[rejected];
+    layout.children[index].querySelector("[data-review]").disabled = !hasReviewCommand;
+    put(layout.children[index].querySelector("p"), [config, result, input, evidence].filter(Boolean).join(" · ") + timestamp);
   });
 }
 
@@ -186,10 +206,14 @@ function render(view) {
   put(byId("diagnostic-state"), label);
   put(byId("activity-detail"), detail);
   put(byId("activity-issue"), activity.issue);
+  put(byId("diagnostic-issue"), activity.issue);
+  put(byId("build-info"), view.buildInfo);
+  put(byId("build-executable"), view.executable ?? "");
   put(byId("retained-paths"), activity.retainedPaths.join(" · "));
   const prepared = activity.workspaces.length > 0;
   byId("workspace-instructions").hidden = !prepared;
   byId("check-hooks").hidden = byId("stop-activity").hidden = !prepared;
+  byId("check-hooks").disabled = activity.checking;
   byId("start-activity").hidden = prepared || !activity.available;
   byId("start-activity").disabled = activity.state === "starting" || activity.state === "stopping";
   byId("startup").hidden = !view.canSetStartup;

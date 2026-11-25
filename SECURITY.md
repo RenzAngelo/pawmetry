@@ -41,7 +41,7 @@ The IPC capability is generated locally and is unrelated to Codex credentials. T
 
 The hook helper discards model outcomes, tool data and every unapproved field in its transient input. Work, session and turn identifiers are HMAC-derived in memory. Cleanup leaves edited hook definitions and nonempty workspaces in place. After a crash the old receiver capability is inoperative. Remove the leftover generated definitions in the disposable folders before reusing them. Global settings, existing project hooks and native trust records are managed separately by the user.
 
-Settings displays only the paths it generated for this local run and bounded per-workspace diagnostic labels. Checking files compares the original configuration in place without exposing its contents to the renderer. Copy path copies only a generated folder path. A matching file or valid event does not independently expose the IDE's trust record.
+Settings displays only explicitly selected preview paths, generated folders for this run, the running app's identity and bounded diagnostic labels. Checks compare the original config in place without disclosing it to the renderer. A separate authenticated synthetic probe can test the launcher and receiver, but cannot enter the activity timeline. Rejected native input can emit only a fixed health code, workspace label and timestamp. The editor launcher accepts only a generated folder and an eligible local `Code.exe`, using a fixed argument vector. The copied review command opens native Codex for that folder. Neither action modifies Codex configuration or approves a hook.
 
 ## Vulnerability reports
 

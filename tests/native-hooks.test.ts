@@ -18,10 +18,11 @@ test("native Codex discovers independent disposable workspace hooks without appr
     const root = await mkdtemp(join(tmpdir(), "pawmetry-native-hooks-"));
     const profile = join(root, "profile");
     const workspaces = [join(root, "workspace-a"), join(root, "workspace-b")];
+    const unreviewed = join(root, "workspace-unreviewed");
     const files = workspaces.map((cwd) => join(cwd, ".codex", "hooks.json"));
     try {
       await mkdir(profile);
-      for (const cwd of workspaces) await mkdir(join(cwd, ".codex"), { recursive: true });
+      for (const cwd of [...workspaces, unreviewed]) await mkdir(join(cwd, ".codex"), { recursive: true });
       await writeFile(join(profile, "config.toml"), workspaces.map((cwd) =>
         "[projects." + JSON.stringify(cwd) + ']\ntrust_level="trusted"\n').join("\n") + "[analytics]\nenabled=false\n");
       const env: NodeJS.ProcessEnv = { CODEX_HOME: profile };
@@ -49,9 +50,9 @@ test("native Codex discovers independent disposable workspace hooks without appr
           return frame.result;
         }
       };
-      const list = async () => {
-        const { data } = await request("hooks/list", { cwds: workspaces });
-        assert.equal(data.length, 2);
+      const list = async (cwds = workspaces) => {
+        const { data } = await request("hooks/list", { cwds });
+        assert.equal(data.length, cwds.length);
         return data.map((entry: { errors: unknown[]; hooks: Array<{ source: string; eventName: string; trustStatus: string }> }) => {
           assert.equal(entry.errors.length, 0);
           return entry.hooks.filter((hook) => hook.source === "project" || hook.source === "user");
@@ -63,8 +64,11 @@ test("native Codex discovers independent disposable workspace hooks without appr
         });
         send({ method: "initialized" });
         assert.deepEqual((await list()).map((hooks: unknown[]) => hooks.length), [0, 0]);
-        const configs = (["A", "B"] as const).map((label) => hookConfig(process.execPath, 12345, label.toLowerCase().repeat(64), label, false));
+        const configs = (["A", "B"] as const).map((label, index) => hookConfig(process.execPath, 12345, label.toLowerCase().repeat(64), label, false, workspaces[index]));
         await Promise.all(configs.map((config, index) => writeFile(files[index], config, { flag: "wx" })));
+        await writeFile(join(unreviewed, ".codex", "hooks.json"), hookConfig(process.execPath, 12345, "a".repeat(64), "A", false, unreviewed));
+        assert.deepEqual((await list([unreviewed])).map((hooks: unknown[]) => hooks.length), [0],
+          "a project layer without native project trust is skipped even with its hook file present");
         for (const hooks of await list()) {
           const names = Object.keys(JSON.parse(configs[0]).hooks).map((name) => name[0].toLowerCase() + name.slice(1));
           assert.deepEqual(hooks.map((hook: { eventName: string }) => hook.eventName).sort(), names.sort());

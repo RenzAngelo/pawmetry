@@ -94,16 +94,17 @@
         <h2>Diagnostics</h2>
         <p>Use disposable workspaces to verify that your Codex client delivers native activity before connecting real projects.</p>
         <p id="diagnostic-state" class="state" role="status"></p>
+        <p id="diagnostic-issue" role="status"></p>
         <div class="actions">
           <button id="start-activity" data-action="start-activity">Create two disposable workspaces</button>
-          <button id="check-hooks" data-action="check-hooks" hidden>Check hook files</button>
+          <button id="check-hooks" data-action="check-hooks" hidden>Check files and receiver</button>
           <button id="stop-activity" data-action="stop-activity" hidden>Disconnect and remove disposable hooks</button>
         </div>
         <div id="workspace-instructions" hidden>
           <ol>
-            <li>Open each folder in its own local VS Code window.</li>
-            <li>Review the generated <code>.codex/hooks.json</code> and approve those exact definitions in native Codex if you agree.</li>
-            <li>Try a model-only turn or a benign tool action. Look for events below.</li>
+            <li>Run <strong>Check files and receiver</strong>. The synthetic check never drives the pet.</li>
+            <li>Copy the Codex review command for that folder. Run it in Windows PowerShell, then type <code>/hooks</code> in the Codex terminal. Review only the Pawmetry entries for that disposable folder, and approve them if you agree.</li>
+            <li>Use <strong>Open in VS Code</strong>. Try a model-only turn after approval. A matching file and a passing transport check cannot confirm native approval.</li>
           </ol>
           <div id="workspaces"></div>
         </div>
@@ -117,7 +118,7 @@
     </section>
     <section id="about" aria-labelledby="about-title" hidden>
       <h1 id="about-title" tabindex="-1">About</h1>
-      <div class="panel"><h2>Pawmetry</h2><p>Local development build</p><p>Windows companion for Codex quota and activity. Interface icons by Lucide.</p></div>
+      <div class="panel"><h2>Pawmetry</h2><p id="build-info"></p><p id="build-executable" class="file-path"></p><p>Windows companion for Codex quota and activity. Interface icons by Lucide.</p></div>
     </section>
   </main>
 </div>

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, screen, Tray } from "electron";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
@@ -21,6 +21,7 @@ import { isLocalSender, localWindow } from "./local-window.mjs";
 import { createSettingsWindow, settingsUrl } from "./settings-window.mjs";
 import { validSetting } from "./settings-model.ts";
 import { enrollmentTargets } from "./activity-setup.ts";
+import { openInCode, reviewCommand } from "./activity-client.ts";
 import { createCompanionMenu, menuUrl } from "./menu-window.mjs";
 
 const liveSmoke = process.argv.includes("--smoke-live");
@@ -61,6 +62,8 @@ let activityReceiver;
 let activityStopping;
 let activityIssue = "";
 let activityChecks = {};
+let activityTransport = {};
+let activityChecking = false;
 let retainedActivityPaths = [];
 let monitoringPaused = false;
 let liveSelected = false;
@@ -69,7 +72,11 @@ let hovered = false;
 let hitTimer;
 let wakeAt = 0;
 let controlMenu;
+let viewport;
+let viewportTimer;
+let resizeGeneration = 0;
 let codexInstall = { status: "unchecked" };
+let codexExecutable;
 let codexDetection;
 let selectedProject = null;
 const petScales = { small: 0.8, standard: 1, large: 1.2 };
@@ -78,6 +85,13 @@ const preferencePath = join(userData, "companion.json");
 const preferences = loadPreferences(preferencePath);
 const takeAlerts = quotaAlerts();
 const petUrl = new URL("./index.html", import.meta.url).href;
+const buildInfo = (() => {
+  if (!app.isPackaged) return "Source checkout";
+  try {
+    const { version, revision, fingerprint } = JSON.parse(readFileSync(join(app.getAppPath(), "build-info.json"), "utf8"));
+    return `${version} · ${revision} · ${fingerprint}`;
+  } catch { return "Unlabeled portable build"; }
+})();
 const companionMenu = createCompanionMenu(() => paint());
 const settings = createSettingsWindow({ saved: () => preferences.settingsBounds,
   move: (bounds) => { preferences.settingsBounds = bounds; persist(); }, closing: () => closing,
@@ -125,6 +139,7 @@ async function setActivity(enabled) {
   activityIssue = "";
   retainedActivityPaths = [];
   activityChecks = {};
+  activityTransport = {};
   activityTask = prepareReceiver({ electron: true, onChange: paint, onError: () => {
     if (activityReceiver) void setActivity(false).then(() => {
       activityIssue = ["The local receiver stopped unexpectedly.", activityIssue].filter(Boolean).join(" ");
@@ -142,21 +157,38 @@ async function setActivity(enabled) {
     activityTask = undefined;
     paint();
   }
+  if (activityReceiver && !closing) void checkActivitySetup();
+}
+
+async function checkActivitySetup() {
+  const receiver = activityReceiver;
+  if (!receiver || activityChecking) return;
+  activityChecking = true;
+  paint();
+  try {
+    const [checked, transport] = await Promise.all([receiver.checkConfigurations(), receiver.probe()]);
+    if (receiver === activityReceiver) { activityChecks = checked; activityTransport = transport; }
+  } catch {
+    if (receiver === activityReceiver) activityIssue = "The local receiver check could not complete. Try Check files and receiver again.";
+  } finally { activityChecking = false; paint(); }
 }
 
 function activityStatus(status) {
-  const workspaces = activityReceiver?.diagnostics().map((row) => ({ ...row, configuration: activityChecks[row.label] ?? "unchecked" })) ?? [];
+  const workspaces = activityReceiver?.diagnostics().map((row) => ({ ...row,
+    configuration: activityChecks[row.label] ?? "unchecked", transport: activityTransport[row.label] ?? "unchecked" })) ?? [];
   const observed = workspaces.some(({ seen }) => seen);
   const expired = workspaces.some(({ last, states }) => last && states.length === 0);
   const state = activityStopping ? "stopping" : activityTask ? "starting" : monitoringPaused ? "paused" : !activityReceiver ? "unconfigured"
     : !observed ? "review" : status.activity === "unknown" ? (expired ? "stale" : "no-active-sessions") : status.activity;
-  return { state, workspaces, issue: activityIssue, retainedPaths: retainedActivityPaths, available: process.platform === "win32" };
+  return { state, workspaces, issue: activityIssue, retainedPaths: retainedActivityPaths, available: process.platform === "win32",
+    checking: activityChecking, hasReviewCommand: !!codexExecutable };
 }
 
 function settingsState() {
   const { status } = companionView();
   return { preferences, quota: status.quota, liveSelected, monitoringPaused, activity: activityStatus(status),
     codexInstall, targets: enrollmentTargets(app.getPath("home"), process.env.CODEX_HOME, selectedProject),
+    buildInfo, executable: app.isPackaged ? process.execPath : null,
     displays: screen.getAllDisplays().map(({ id, label }, i) => ({ id, label: label || `Display ${i + 1}` })),
     canSetStartup: app.isPackaged && process.platform === "win32" };
 }
@@ -166,8 +198,9 @@ async function detectCodexInstall() {
   codexInstall = { status: "checking" };
   paint();
   codexDetection = discoverCodex().then((install) => {
+    codexExecutable = install.status === "found" ? install.executable : undefined;
     codexInstall = install.status === "found" ? { status: "found", version: install.version } : { status: install.status };
-  }).catch(() => { codexInstall = { status: "missing" }; }).finally(() => { codexDetection = undefined; paint(); });
+  }).catch(() => { codexExecutable = undefined; codexInstall = { status: "missing" }; }).finally(() => { codexDetection = undefined; paint(); });
   return codexDetection;
 }
 
@@ -178,7 +211,7 @@ function paint() {
   const simulation = status.mode === "simulation";
   const now = Date.now();
   const sample = simulation && !monitoringPaused ? simulate(scenarios[scenario], scenarioAt) : null;
-  const shown = sample && (status.activity === "working" || status.activity === "interrupted")
+  const shown = sample && activityReceiver
     ? { ...sample.pet, pose: pet.pose } : sample?.pet ?? pet;
   const motion = animationStyle(shown, motionFor(shown.pose), paused || preferences.reducedMotion);
   const assumed = (slot) => sample?.quota?.windows.find((item) => item.slot === slot)?.resetsAtMs ?? null;
@@ -262,8 +295,8 @@ async function smokeLive() {
   }
 }
 
-async function until(check, description) {
-  const deadline = performance.now() + 3500;
+async function until(check, description, timeout = 3500) {
+  const deadline = performance.now() + timeout;
   while (performance.now() < deadline) {
     if (await check()) return;
     await wait(40);
@@ -322,6 +355,11 @@ async function smokeControls(menu) {
   assert.equal(window.isVisible(), false, "Settings left the pet hidden");
   assert.equal(preferences.clickThrough, true, "Settings did not change click-through");
   await until(() => first.webContents.executeJavaScript("document.querySelector('#activity-state').textContent === 'Activity monitoring not configured'"), "Settings connected to its local preload");
+  if (app.isPackaged) {
+    const displayed = await first.webContents.executeJavaScript("document.querySelector('#build-info').textContent");
+    assert.match(displayed, /\d+\.\d+\.\d+ · ([a-f0-9]{12}|unversioned) · [a-f0-9]{12}/, "About identifies the exact packaged app");
+    console.log("Packaged build identity verified in About.");
+  }
   assert.equal((await first.webContents.capturePage()).isEmpty(), false, "native Settings rendered a nonempty frame");
   first.setBounds({ ...placed, width: 370 });
   await until(() => first.webContents.executeJavaScript(`matchMedia('(max-width: 480px)').matches &&
@@ -368,14 +406,27 @@ async function smokeActivity() {
   await panel.webContents.executeJavaScript(`document.querySelector('nav [data-section="advanced"]').click()`);
   await panel.webContents.executeJavaScript("document.querySelector('#start-activity').click()");
   await until(async () => activityReceiver && !activityTask && await panel.webContents.executeJavaScript(
-    "document.querySelector('#diagnostic-state').textContent === 'Native hook approval required'"), "Settings created two disposable workspaces and is awaiting events");
+    "document.querySelector('#diagnostic-state').textContent === 'Native approval not verified'"), "Settings created two disposable workspaces and is awaiting events");
   const receiver = activityReceiver;
   assert.deepEqual(await receiver.checkConfigurations(), { A: "present", B: "present" });
+  await panel.webContents.executeJavaScript("document.querySelector('#check-hooks').click()");
+  await until(() => activityTransport.A === "passed" && activityTransport.B === "passed", "Settings self-test reached both workspace keys");
+  assert.equal(receiver.aggregate(), "unknown", "diagnostic probes cannot animate the pet");
+  assert.equal(receiver.diagnostics().some(({ seen }) => seen), false);
+  const configB = join(receiver.paths.B, ".codex", "hooks.json");
+  const originalConfig = readFileSync(configB);
+  try {
+    writeFileSync(configB, "{}");
+    assert.deepEqual(await receiver.probe(), { A: "passed", B: "invalid-configuration" });
+  } finally { writeFileSync(configB, originalConfig); }
   async function deliver(folder, name) {
     const command = JSON.parse(readFileSync(join(folder, ".codex", "hooks.json"), "utf8")).hooks[name][0].hooks[0].command;
-    const shell = join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-    const child = spawn(shell, ["-NoProfile", "-NonInteractive", "-Command", command],
-      { windowsHide: true, stdio: ["pipe", "ignore", "ignore"], timeout: 3500 });
+    const system = join(process.env.SystemRoot, "System32");
+    const useCmd = folder === receiver.paths.A;
+    const shell = useCmd ? join(system, "cmd.exe") : join(system, "WindowsPowerShell", "v1.0", "powershell.exe");
+    const argv = useCmd ? ["/D", "/S", "/C", `"${command}"`] : ["-NoProfile", "-NonInteractive", "-Command", command];
+    const child = spawn(shell, argv,
+      { cwd: folder, windowsVerbatimArguments: useCmd, windowsHide: true, stdio: ["pipe", "ignore", "ignore"], timeout: 4200 });
     child.stdin.on("error", () => {});
     child.stdin.end(JSON.stringify({ hook_event_name: name, session_id: "fixture", turn_id: "fixture" }) + "\n");
     const [code] = await once(child, "close");
@@ -411,6 +462,7 @@ async function smokeActivity() {
   } finally {
     activityReceiver = undefined;
     assert.equal(await receiver.close(), true);
+    assert.deepEqual(await receiver.probe(), { A: "receiver-unavailable", B: "receiver-unavailable" });
     panel.close();
   }
   console.log("Desktop activity ingress, concurrent synthetic hook commands, and renderer passed.");
@@ -453,7 +505,7 @@ function selectMonitor(display) {
 function setVisible(visible) {
   if (!window || window.isDestroyed()) return;
   preferences.hidden = !visible;
-  if (visible) window.showInactive();
+  if (visible) { window.showInactive(); checkPetViewport(); }
   else { companionMenu.close(); window.hide(); }
   updateHitTesting();
   persist();
@@ -601,6 +653,11 @@ function connectRendererIpc() {
   ipcMain.handle("pawmetry:control", (event, op) => {
     if (isLocalSender(event, window, petUrl) && ["settings", "hide", "toggle-top", "more"].includes(op)) command(op);
   });
+  ipcMain.on("pawmetry:viewport", (event, width, height) => {
+    if (isLocalSender(event, window, petUrl) && [width, height].every((size) => Number.isInteger(size) && size > 0 && size <= 4096)) {
+      viewport = { width, height };
+    }
+  });
   ipcMain.handle("pawmetry:menu-command", (event, op) => {
     if (!isLocalSender(event, companionMenu.window, menuUrl) || !companionMenu.window.isVisible()
       || !["close", "mode-pet", "mode-compact", "mode-dashboard", "toggle-animation", "toggle-monitoring", "toggle-click", "refresh", "settings", "quit"].includes(op)) return;
@@ -620,14 +677,20 @@ function connectRendererIpc() {
         break;
       }
       case "start-activity": case "stop-activity": await setActivity(action === "start-activity"); break;
-      case "check-hooks": {
+      case "check-hooks": await checkActivitySetup(); break;
+      case "copy-A": case "copy-B": if (activityReceiver) clipboard.writeText(activityReceiver.paths[action === "copy-A" ? "A" : "B"]); break;
+      case "open-A": case "open-B": {
         const receiver = activityReceiver;
-        if (!receiver) break;
-        const checked = await receiver.checkConfigurations();
-        if (receiver === activityReceiver) activityChecks = checked;
+        if (receiver && !await openInCode(receiver.paths[action === "open-A" ? "A" : "B"])) {
+          activityIssue = "VS Code could not be opened automatically. Copy the workspace path and use VS Code → File → Open Folder.";
+        }
         break;
       }
-      case "copy-A": case "copy-B": if (activityReceiver) clipboard.writeText(activityReceiver.paths[action === "copy-A" ? "A" : "B"]); break;
+      case "review-A": case "review-B": {
+        const receiver = activityReceiver;
+        if (receiver && codexExecutable) clipboard.writeText(reviewCommand(codexExecutable, receiver.paths[action === "review-A" ? "A" : "B"]));
+        break;
+      }
       case "live-quota": case "simulate-quota": setLiveQuota(action === "live-quota"); break;
       case "pause-monitoring": case "resume-monitoring": case "refresh": command(action); break;
       case "next-scenario": advance(); break;
@@ -670,14 +733,9 @@ async function start() {
   const [width, height] = dimensions[preferences.mode][preferences.windowSizes[preferences.mode]];
   const wanted = { x: workArea.x + workArea.width - width - 20, y: workArea.y + 24, ...preferences.bounds, width, height };
   const initial = fitBounds(wanted, selected?.workArea ?? screen.getDisplayMatching(wanted).workArea);
-  window = localWindow({
-    ...initial,
-    transparent: true, frame: false, alwaysOnTop: preferences.alwaysOnTop, skipTaskbar: true, resizable: false, show: false,
-  }, local("preload.cjs"), !smoke);
+  window = newPetWindow(initial);
   connectRendererIpc();
   const menu = buildControlMenu();
-  window.webContents.on("context-menu", () => command("more"));
-  window.on("system-context-menu", (event) => { event.preventDefault(); command("more"); });
   await window.loadFile(local("index.html"));
   paint();
   if (restoreSmoke) {
@@ -703,16 +761,10 @@ async function start() {
         selectSize(size);
         const [width, height] = dimensions[mode][size];
         assert.deepEqual(window.getSize(), [width, height], "native size after preset change");
-        const resized = await window.webContents.executeJavaScript(`new Promise((resolve) => {
-          const matches = () => innerWidth === ${width} && innerHeight === ${height} && document.body.dataset.layout === '${mode}';
-          const until = performance.now() + 1600;
-          const check = () => matches() || performance.now() >= until ? resolve(matches()) : requestAnimationFrame(check);
-          check();
-        })`);
-        if (!resized) {
-          const observed = await window.webContents.executeJavaScript("[innerWidth, innerHeight, document.body.dataset.layout]");
-          assert.deepEqual(observed, [width, height, mode], "renderer size and layout after preset change");
-        }
+        await until(async () => {
+          try { return await window.webContents.executeJavaScript(`innerWidth === ${width} && innerHeight === ${height} && document.body.dataset.layout === '${mode}'`); }
+          catch { return false; }
+        }, "renderer size and layout after preset change", 4500);
         assert.equal(await window.webContents.executeJavaScript(`
           [...document.querySelectorAll('.commands button')].every(button => {
             const box = button.getBoundingClientRect();
@@ -731,6 +783,14 @@ async function start() {
     assert.deepEqual(window.getSize(), [...dimensions.dashboard.small]);
     savePreferences(preferencePath, preferences);
     console.log("Desktop bidirectional native sizing, renderer sizing, and saved bounds passed.");
+    const original = window;
+    await until(() => viewport?.width === window.getContentBounds().width, "the renderer reported its viewport");
+    viewport = { width: 1, height: 1 };
+    checkPetViewport();
+    await until(() => original.isDestroyed() && window.isVisible() && viewport?.width === window.getContentBounds().width,
+      "the companion replaced a stale renderer and retained its accepted bounds");
+    assert.deepEqual(window.getSize(), [...dimensions.dashboard.small]);
+    console.log("Desktop restored a stale renderer without resetting desktop state.");
     await smokeControls(menu);
     if (process.platform === "win32") await smokeActivity();
     paint();
@@ -752,8 +812,6 @@ async function start() {
   tray.setToolTip("Pawmetry");
   tray.setContextMenu(menu);
   tray.on("double-click", recover);
-  window.on("move", persist);
-  window.on("resize", persist);
   for (const event of ["display-removed", "display-metrics-changed"]) screen.on(event, () => { companionMenu.close(); keepOnDisplay(); settings.recover(); paint(); });
   powerMonitor.on("resume", () => { wakeAt = Date.now() + 2000; });
   if (preferences.shortcut && !chooseShortcut(preferences.shortcut)) preferences.shortcut = null;
@@ -828,6 +886,50 @@ function applyBounds(target) {
     window.setMinimumSize(Math.min(width, target.width), Math.min(height, target.height));
   }
   window.setBounds(target);
+  if (width !== target.width || height !== target.height) checkPetViewport();
+}
+
+function newPetWindow(bounds) {
+  const pet = localWindow({ ...bounds, transparent: true, frame: false, alwaysOnTop: preferences.alwaysOnTop,
+    skipTaskbar: true, resizable: false, show: false }, local("preload.cjs"), !smoke);
+  pet.webContents.on("context-menu", () => command("more"));
+  pet.on("system-context-menu", (event) => { event.preventDefault(); command("more"); });
+  const recordBounds = () => { if (window === pet) persist(); };
+  pet.on("move", recordBounds);
+  pet.on("resize", recordBounds);
+  return pet;
+}
+
+function checkPetViewport() {
+  clearTimeout(viewportTimer);
+  const generation = ++resizeGeneration;
+  const original = window;
+  if (!original?.isVisible()) return;
+  viewportTimer = setTimeout(async () => {
+    if (closing || original.isDestroyed() || !original.isVisible()) return;
+    const { width, height } = original.getContentBounds();
+    if (viewport && Math.abs(viewport.width - width) <= 1 && Math.abs(viewport.height - height) <= 1) return;
+    // Windows may resize the native transparent window without updating its Chromium viewport.
+    // Reopen only the pet at its already accepted bounds and keep the receiver and settings alive.
+    const replacement = newPetWindow(original.getBounds());
+    try {
+      await replacement.loadFile(local("index.html"));
+      if (closing || generation !== resizeGeneration || window !== original || original.isDestroyed() || !original.isVisible()) return;
+      const final = original.getBounds();
+      replacement.setPosition(final.x, final.y);
+      companionMenu.close();
+      window = replacement;
+      viewport = undefined;
+      mouseIgnored = false;
+      applyAlwaysOnTop();
+      replacement.showInactive();
+      updateHitTesting();
+      replacement.webContents.send("pawmetry:request-viewport");
+      paint();
+      original.destroy();
+    } catch { /* Keep the old window if the replacement could not load. */ }
+    finally { if (window !== replacement && !replacement.isDestroyed()) replacement.destroy(); }
+  }, 1250);
 }
 
 if (lockSmoke) {
@@ -863,7 +965,7 @@ if (lockSmoke) {
     const stoppingActivity = Promise.resolve(activityTask ?? activityReceiver).then((receiver) => receiver?.close());
     void Promise.allSettled([stopping, closingEndpoint, stoppingActivity, activityStopping]).then(() => app.quit());
   });
-  app.on("will-quit", () => { clearInterval(timer); clearInterval(hitTimer); globalShortcut.unregisterAll(); tray?.destroy(); });
+  app.on("will-quit", () => { clearInterval(timer); clearInterval(hitTimer); clearTimeout(viewportTimer); globalShortcut.unregisterAll(); tray?.destroy(); });
   start().catch((error) => {
     if (smoke) console.error(error);
     console.error("The Pawmetry simulation window could not start.");

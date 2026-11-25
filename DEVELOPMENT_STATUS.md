@@ -13,6 +13,11 @@
 
 ## Current implementation and open validation
 
+- **Failed manual activity attempt.** Both disposable VS Code turns succeeded, but neither row received a hook event and native hook approval was not confirmed. Neither Pawmetry process was running at inspection, so the historical executable cannot be identified. The pre-wizard and `9a92c7a` packages shipped byte-identical receiver code and an unchanged wire protocol. Old generated definitions are tied to their original receiver port, key and executable path. The update itself did not change the receiver used by that attempt.
+- **Native investigation.** Bundled Codex CLI `0.171.0-alpha.13.2` returned zero project hooks for a disposable workspace whose native project layer was untrusted. With project trust in the isolated test profile it discovered all eight definitions, reporting each hook untrusted. User-level coverage was still discovered from both test folders. The former PowerShell-only command also failed in a `cmd.exe` reproduction. That demonstrates a separate compatibility fault and does not establish which shell or gate stopped the historical attempt.
+- **Activity fixes and diagnostics.** The current launcher works under both Windows PowerShell and `cmd.exe` in synthetic tests. Diagnostics checks each generated file and independently tests the actual helper and receiver. A wrong working directory or unsupported payload produces a bounded authenticated rejection without updating the pet. The UI offers direct opening of the generated folder in VS Code and copies the native CLI review command. Packaged builds show the Git revision, content fingerprint and executable path in **About**. Trusted activity from the IDE remains unverified, and real profile-wide and project-specific enrollment remains preview-only.
+- **Resize follow-up.** A viewport acknowledgement detects when the native window resized but Chromium retained the prior viewport. If needed, Pawmetry replaces only the transparent pet window at the accepted bounds. Native smoke forced a stale acknowledgement and verified recovery. Mixed-DPI physical displays remain manual QA.
+
 - **Codex onboarding.** Connections now detects the eligible local Windows x64 VS Code Codex bundle and previews a user-level or project-only hook target. An isolated Codex profile reported the same eight user-level hooks from two different working folders. All remained untrusted and independent removal was detected. This proves native discovery, while trusted IDE delivery is still open. Existing-project enrollment is unavailable until that result. Advanced owns temporary workspace validation, file checks and cleanup. [Setup and scope details](README.md#plan-enrollment-after-disposable-qa)
 - **Visual update.** Settings has eight separate sidebar sections, shared dark/light/system themes, and reusable native controls styled with design tokens. The companion keeps four icon buttons. The smaller pet toolbar appears on hover. A keyboard-accessible local options window handles the other commands. The native tray remains the recovery route. Lucide and Feather notices ship with the vendored icons.
 
@@ -31,6 +36,6 @@
 
 ## Next steps
 
-1. Validate actual native hook delivery and quota continuity in the disposable IDE windows. Record the results once in [MANUAL_TESTS.md](MANUAL_TESTS.md).
+1. Verify project trust and hook approval in native `/hooks` on the new build, starting with Workspace A only. Check one real model event before repeating in Workspace B. Record the results in [MANUAL_TESTS.md](MANUAL_TESTS.md).
 2. If native activity passes, prepare a reviewable `.codex/hooks.json` addition and rollback for any requested existing project. Wait for separate approval before writing it or performing trust changes.
 3. Check physical monitors, native notifications, independent Windows logon isolation and startup if approved. A per-user installer, signing, publisher identity and project license remain release gates.

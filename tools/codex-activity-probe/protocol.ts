@@ -11,6 +11,9 @@ export const hookEvents = {
   Interrupt: "interrupted", Stop: "turn-stopped",
 } as const;
 export type HookName = keyof typeof hookEvents;
+export type HookWorkspace = "A" | "B";
+export type HookDiagnostic = { workspace: HookWorkspace; sentAt: number } &
+  ({ kind: "probe"; challenge: string } | { kind: "unsupported-input" | "wrong-workspace" });
 type EventName = (typeof hookEvents)[HookName];
 export type HookObservation = {
   workspace: "A" | "B"; event: EventName; session: string; turn: string | null; tool: string | null;
@@ -43,6 +46,26 @@ export function projectHook(input: unknown, key: string, workspace: "A" | "B", s
 
 export function sealObservation(event: HookObservation, key: string): Buffer {
   return Buffer.from(JSON.stringify({ event, mac: digest(key, ["hook-v2", event]) }));
+}
+
+export function sealDiagnostic(value: HookDiagnostic, key: string): Buffer {
+  return Buffer.from(JSON.stringify({ diagnostic: value, mac: digest(key, ["hook-diagnostic-v1", value]) }));
+}
+
+export function acceptDiagnostic(packet: Buffer, keys: Record<HookWorkspace, string>, now = Date.now()): HookDiagnostic | null {
+  if (packet.length > 512) return null;
+  try {
+    const envelope = fields(JSON.parse(packet.toString("utf8")), ["diagnostic", "mac"]);
+    const value = envelope?.diagnostic as Record<string, unknown> | null;
+    if (!value || typeof value !== "object" || !workspaceId(value.workspace) || !isInstant(value.sentAt)
+      || value.sentAt > now || now - value.sentAt > deliveryWindowMs || typeof envelope?.mac !== "string" || !hex.test(envelope.mac)) return null;
+    const valid = value.kind === "probe" ? fields(value, ["workspace", "sentAt", "kind", "challenge"])
+      && typeof value.challenge === "string" && /^[a-f0-9]{32}$/.test(value.challenge)
+      : (value.kind === "unsupported-input" || value.kind === "wrong-workspace") && fields(value, ["workspace", "sentAt", "kind"]);
+    if (!valid) return null;
+    const expected = digest(keys[value.workspace], ["hook-diagnostic-v1", value]);
+    return timingSafeEqual(Buffer.from(envelope.mac, "hex"), Buffer.from(expected, "hex")) ? value as HookDiagnostic : null;
+  } catch { return null; }
 }
 
 export function acceptObservation(packet: Buffer, keys: Record<"A" | "B", string>, now = Date.now()): HookObservation | null {

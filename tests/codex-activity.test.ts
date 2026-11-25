@@ -4,8 +4,10 @@ import { createSocket } from "node:dgram";
 import { once } from "node:events";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { acceptObservation, maxHookBytes, projectHook, sealObservation } from "../tools/codex-activity-probe/protocol.ts";
+import { acceptDiagnostic, acceptObservation, maxHookBytes, projectHook, sealDiagnostic, sealObservation } from "../tools/codex-activity-probe/protocol.ts";
 import { HookTimeline } from "../tools/codex-activity-probe/timeline.ts";
+import { join } from "node:path";
+import { reviewCommand } from "../apps/desktop/activity-client.ts";
 
 const token = "a".repeat(64);
 const keys = { A: token, B: "b".repeat(64) };
@@ -37,6 +39,21 @@ test("projects only the tool-start event and a run-scoped pseudonym", () => {
   assert.equal(acceptObservation(packet, keys, 11_001), null);
 });
 
+test("signed diagnostics cannot be interpreted as activity or disclose hook input", () => {
+  const probe = { workspace: "A", sentAt: 1000, kind: "probe", challenge: "b".repeat(32) } as const;
+  const packet = sealDiagnostic(probe, token);
+  assert.deepEqual(acceptDiagnostic(packet, keys, 1000), probe);
+  assert.equal(acceptDiagnostic(packet, keys, 11_001), null);
+  assert.equal(acceptDiagnostic(sealDiagnostic({ ...probe, workspace: "B" }, token), keys, 1000), null);
+  assert.equal(acceptObservation(packet, keys, 1000), null);
+  assert.equal(acceptDiagnostic(sealDiagnostic({ ...probe, raw: "private" } as typeof probe, token), keys, 1000), null);
+});
+
+test("native review command preserves spaces and quotes without trusting anything", () => {
+  assert.equal(reviewCommand("C:\\Program Files\\codex.exe", "C:\\O'Brien's demo"),
+    "& 'C:\\Program Files\\codex.exe' --cd 'C:\\O''Brien''s demo'");
+});
+
 test("two synthetic hook processes send distinct observations over loopback", { timeout: 5000 }, async (t) => {
   const socket = createSocket("udp4");
   socket.bind(0, "127.0.0.1");
@@ -44,10 +61,13 @@ test("two synthetic hook processes send distinct observations over loopback", { 
   t.after(() => socket.close());
   const port = socket.address().port;
   const observations: string[] = [];
+  const diagnostics: string[] = [];
   socket.on("message", (raw) => {
     assert.doesNotMatch(raw.toString(), /canary|session-raw/);
     const event = acceptObservation(raw, keys);
     if (event) observations.push(event.session);
+    const diagnostic = acceptDiagnostic(raw, keys);
+    if (diagnostic) diagnostics.push(diagnostic.kind);
   });
   await Promise.all([
     invoke(JSON.stringify(input), port),
@@ -57,6 +77,22 @@ test("two synthetic hook processes send distinct observations over loopback", { 
   ]);
   assert.equal(observations.length, 2);
   assert.equal(new Set(observations).size, 2);
+  assert.deepEqual(diagnostics, ["unsupported-input", "unsupported-input"]);
+});
+
+test("a configured workspace cannot attribute events from a different directory", { timeout: 5000 }, async (t) => {
+  const socket = createSocket("udp4");
+  socket.bind(0, "127.0.0.1");
+  await once(socket, "listening");
+  t.after(() => socket.close());
+  const port = socket.address().port;
+  const received = once(socket, "message");
+  const child = spawn(process.execPath, [script, String(port), token, "A", "PreToolUse", join(process.cwd(), "another-workspace")],
+    { stdio: ["ignore", "ignore", "ignore"] });
+  const [[message], [code]] = await Promise.all([received, once(child, "close")]);
+  assert.equal(code, 0);
+  assert.equal(acceptObservation(message, keys), null);
+  assert.equal(acceptDiagnostic(message, keys)?.kind, "wrong-workspace");
 });
 
 test("workspace reducer handles concurrent tools, missed starts, duplicates, and terminal evidence", () => {
