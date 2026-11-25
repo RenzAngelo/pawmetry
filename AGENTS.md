@@ -2,7 +2,7 @@
 
 Pawmetry is a local-first desktop pet and VS Code extension. Read [the product brief](PRODUCT_BRIEF.md), [feasibility findings](FEASIBILITY.md) and [security requirements](SECURITY.md) before changing its design.
 
-- The repository is at Phase 0–1. Keep work to research and documentation until the maintainer approves an implementation milestone.
+- The maintainer approved the quota-only probe. Keep implementation within that milestone until the maintainer approves further work.
 - Use current official documentation and distinguish documented behavior, local verification, inference and open questions. Require independent runtime evidence for each provider capability and supported surface.
 - Preserve provider-neutral contracts. Keep quota, activity and connection state independent. Missing, stale or ambiguous data becomes unknown. Simulation stays visibly labeled.
 - Leave credentials and content with their provider. Never collect prompts, source, conversations or raw provider logs. Use documented interfaces and ask for explicit consent before modifying any provider hook configuration.

@@ -1,0 +1,13 @@
+{
+  "name": "pawmetry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "quota:probe": "node tools/codex-quota-probe/cli.ts",
+    "test": "node --test tests/codex-quota-probe.test.ts"
+  }
+}

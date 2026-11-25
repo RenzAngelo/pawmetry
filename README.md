@@ -6,9 +6,27 @@ Pawmetry is a planned free, open-source, privacy-first desktop pet and VS Code e
 
 ## Project status
 
-Phase 0 and Phase 1 are complete for review. This repository contains the product definition, technical feasibility and implementation plan. Windows 11 x64 and VS Code desktop are the first target, with OpenAI Codex as the first integration candidate. Claude Code and GitHub Copilot are subsequent candidates. Pawmetry has yet to pass independent runtime testing with any provider.
+The quota probe has retrieved live Codex account limits on Windows 11 x64. Three paired comparisons with the official usage interface and a two-window VS Code check remain open. Windows 11 and VS Code desktop are the first product target. Claude Code and GitHub Copilot are subsequent candidates. [Quota probe report](QUOTA_PROBE_REPORT.md)
 
-The first prototype will test whether a separately launched Codex App Server can report matching account quota, whether an opted-in hook can report activity from the stock Codex extension, and whether the desktop and editor show the same simulated state while minimizing or closing VS Code. [Feasibility findings](FEASIBILITY.md) · [Development plan](DEVELOPMENT_PLAN.md)
+## Run the quota probe
+
+Use Node.js 24 or later and an installed native Codex executable with an existing Codex-managed ChatGPT sign-in. From this repository in a normal Windows PowerShell:
+
+~~~powershell
+$codexExecutable = (Get-Command codex -CommandType Application -ErrorAction Stop).Source
+npm.cmd run --silent quota:probe -- --codex "$codexExecutable"
+npm.cmd test
+~~~
+
+If `Get-Command` fails or resolves only a shim, pass the absolute path to the trusted native `codex.exe` directly:
+
+~~~powershell
+npm.cmd run --silent quota:probe -- --codex "C:\path\to\codex.exe"
+~~~
+
+On the tested Windows x64 installation, the OpenAI extension bundled the executable under `%USERPROFILE%\.vscode\extensions\openai.chatgpt-<version>-win32-x64\bin\windows-x86_64\codex.exe`. Check the installed extension version because an update can change the path.
+
+Add `--show-workspace` to display the provider's workspace label locally when supplied. The probe performs one quota read and starts zero agent turns. Tests use synthetic replies and require no sign-in or dependencies. See the [manual comparison procedure](QUOTA_PROBE_REPORT.md#manual-validation).
 
 ## Project documents
 
@@ -21,9 +39,10 @@ The first prototype will test whether a separately launched Codex App Server can
 | [Development plan](DEVELOPMENT_PLAN.md) | Proof of concept, MVP, milestones and next task |
 | [Security](SECURITY.md) | Data boundaries, threat model and consent |
 | [Test plan](TEST_PLAN.md) | Acceptance and support criteria |
+| [Quota probe report](QUOTA_PROBE_REPORT.md) | Runtime evidence, limits and manual validation |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Prior art, licenses and artwork policy |
 | [Contributor guidance](AGENTS.md) | Repository rules and phase boundaries |
 
-The Git baseline uses the existing `main` branch and `origin` remote. The [ignore rules](.gitignore) cover generated artifacts and common local files. Review changes locally with `git status --short`. Application setup instructions will follow an approved implementation milestone.
+The [ignore rules](.gitignore) cover generated artifacts and common local files. Review changes locally with `git status --short`.
 
 Pawmetry is an independent project. The name is provisional pending trademark clearance. A project source license remains to be selected before public distribution.

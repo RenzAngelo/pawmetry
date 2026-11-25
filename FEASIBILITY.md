@@ -26,6 +26,8 @@ An independent Windows companion and VS Code dashboard are feasible using docume
 
 The installed OpenAI extension manifest exposes a CLI binary override and a WSL option. The installed entry bundle launches `codex app-server` through piped stdio and passes no alternate listener in that launch path. This is version-specific static evidence. A temporary `generate-json-schema` run confirmed `account/rateLimits/read`, its update notification schema, and the named thread and turn methods below. The generated quota-window schema requires an integer `usedPercent` and permits null duration and reset fields. The read response also includes account-related fields outside Pawmetry's schema. The probe used generated schemas and installed extension code. No signed-in RPC, model turn, provider configuration change, or window lifecycle test was performed.
 
+**Quota-probe milestone update.** Three signed-in reads succeeded from a separate App Server under the normal Windows user context. The service returned two quota windows, UTC reset epochs and optional identifiers for the principal and quota scope. It did not supply a workspace label. The signed-in official dashboard comparison and the two-window UI check remain open. The managed shell could start Codex in a disposable empty profile, but it did not reach a read in the user's existing profile. [Quota probe report](QUOTA_PROBE_REPORT.md)
+
 ## Codex integration paths
 
 | Surface | Evidence | Pawmetry decision |
@@ -71,7 +73,9 @@ Public Codex source shows rollout JSONL with thread metadata and event records, 
 | Risk | Mitigation and open decision |
 | --- | --- |
 | Wrong account, workspace or bucket | Compare against the official UI and deliberately test ambiguous scope. Keep usage and activity independent and show unknown when scope is uncertain |
+| Concurrent sources and quota attribution | Centralize refresh by verified provider, authentication mode, account, quota scope and bucket. Treat local projects, client instances, conversations and turns as separate identities. Keep activity unknown when a specific source is unobservable. [Concurrency design](ARCHITECTURE.md#multiple-windows-projects-and-sessions) |
 | Version or plan drift | Record binary, extension, OS and sign-in mode per capability. Re-run the relevant smoke tests on changes |
+| Native executable discovery | A bundled Codex executable may be absent from the user's shell PATH, and extension upgrades can change its path. Future onboarding should validate the executable and offer an explicit path when a trusted installation cannot be identified. [Observed discovery issue](QUOTA_PROBE_REPORT.md#limits-and-remaining-risks) |
 | Hook exposure, availability or latency | Require consent, trust and measured event delivery. Exclude hooks that exceed the privacy boundary |
 | IPC access across users and sessions | Verify Windows pipe permissions and remote rejection before using real data. See [security design](SECURITY.md) |
 | Overlay behavior and packaging | Test standard-user installs, mixed-DPI geometry, transparency and tray recovery. Decide signing and SmartScreen handling before public distribution. [Electron code signing](https://www.electronjs.org/docs/latest/tutorial/code-signing) |
