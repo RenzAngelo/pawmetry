@@ -35,7 +35,7 @@ export function createSettingsWindow({ saved, move, visibility, fallback, closin
       const changed = () => { if (!created.isDestroyed() && !created.isMinimized() && !created.isMaximized()) move(created.getBounds()); };
       created.on("move", changed);
       created.on("resize", changed);
-      for (const event of ["show", "hide", "minimize", "restore"]) created.on(event, visibility);
+      for (const event of ["show", "hide", "minimize", "restore", "focus", "blur"]) created.on(event, visibility);
       created.on("closed", () => { if (window === created) { window = undefined; loading = undefined; visibility(); } });
       created.webContents.on("render-process-gone", (_event, info) => { console.error("Settings renderer stopped", info.reason); if (!created.isDestroyed()) created.destroy(); });
       loading = created.loadFile(fileURLToPath(page)).then(() => true, (error) => {

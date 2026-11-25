@@ -13,6 +13,9 @@
 
 ## Current implementation and open validation
 
+- **Workspace A security review (2026-11-26).** All eight pending entries referenced the running `900ffc285ce7` package and its IPv4 loopback receiver. The packaged helper and its imports matched the reviewed source. The handler projects bounded stdin JSON into authenticated event metadata and sends it locally. Approval is not recommended in this elevated setup. `EnableLUA` is `0`, the portable command targets mutable files, and the packaged Electron runtime enables Node environment options that the launcher inherits. Keep native trust pending. The receiver and hook file were left in place. [Codex hook trust](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks) · [Electron fuses](https://www.electronjs.org/docs/latest/tutorial/fuses)
+- **Always-on-top.** Showing Settings cleared the pet's native topmost flag while the renderer still showed the saved pin. The pet now keeps its own pin, and Settings temporarily goes above it only while focused. An isolated Windows smoke covers pin changes, Settings focus, menu opening, hide and restore, resizing, window replacement and restart. The active package was left running. Physical mixed-DPI and cross-monitor stacking are pending.
+
 - **Codex review button.** The Settings renderer called the workspace row renderer without forwarding `hasReviewCommand`, which disabled both copy buttons even when executable discovery succeeded. The renderer now forwards the flag and displays a prerequisite and retry control when discovery cannot supply an executable. Native activity validation still requires manual `/hooks` approval.
 
 - **Failed manual activity attempt.** Both disposable VS Code turns succeeded, but neither row received a hook event and native hook approval was not confirmed. Neither Pawmetry process was running at inspection, so the historical executable cannot be identified. The pre-wizard and `9a92c7a` packages shipped byte-identical receiver code and an unchanged wire protocol. Old generated definitions are tied to their original receiver port, key and executable path. The update itself did not change the receiver used by that attempt.
@@ -38,6 +41,10 @@
 
 ## Next steps
 
-1. Verify project trust and hook approval in native `/hooks` on the new build, starting with Workspace A only. Check one real model event before repeating in Workspace B. Record the results in [MANUAL_TESTS.md](MANUAL_TESTS.md).
+1. Before native approval, harden inherited runtime options and verify the hook artifact and execution identity in a standard-user isolated Windows test. Keep the current Workspace A review pending. Then use native `/hooks` to review only the exact new definitions and check one real model event in Workspace A before proceeding to Workspace B. Build the pin fix for interactive testing when the current receiver can be retired.
 2. If native activity passes, prepare a reviewable `.codex/hooks.json` addition and rollback for any requested existing project. Wait for separate approval before writing it or performing trust changes.
 3. Check physical monitors, native notifications, independent Windows logon isolation and startup if approved. A per-user installer, signing, publisher identity and project license remain release gates.
+
+## Backlog
+
+- Position the floating options menu to the right of the pet when it fits, with a left or other fallback within the active monitor's work area. Verify mixed-DPI scaling and pet overlap near each edge.

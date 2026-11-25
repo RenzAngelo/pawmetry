@@ -224,7 +224,7 @@ function paint() {
       reducedMotion: preferences.reducedMotion,
       menuOpen: companionMenu.window?.isVisible() ?? false,
       roaming: preferences.roaming && !motion.frozen && shown.speed > 0 && ["walking", "running", "slow-walking"].includes(motion.motion),
-      monitoringPaused, paused, alwaysOnTop: preferences.alwaysOnTop },
+      monitoringPaused, paused, alwaysOnTop: window.isAlwaysOnTop() },
     notice: notice && notice.expires > now && (notice.test || status.quota === "fresh") ? notice.message : "",
     resets: {
       energy: resetText(simulation ? assumed("energy") : status.energy.resetAt, now),
@@ -308,8 +308,10 @@ async function smokeControls(menu) {
   const press = (target, selector) => target.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const pet = (op) => press(window, `[data-command="${op}"]`);
   async function openOptions() {
+    const pinned = window.isAlwaysOnTop();
     await pet("more");
     await until(() => companionMenu.window?.isVisible(), "custom options are visible");
+    assert.equal(window.isAlwaysOnTop(), pinned, "opening options preserves the pet's native topmost state");
     return companionMenu.window;
   }
   async function choose(op) {
@@ -332,6 +334,7 @@ async function smokeControls(menu) {
   await until(() => !paused, "animation resumed");
   await pet("toggle-top");
   await until(() => !preferences.alwaysOnTop && !window.isAlwaysOnTop(), "always-on-top disabled");
+  await until(() => loadPreferences(preferencePath).alwaysOnTop === false, "pin-off preference was saved");
   await pet("toggle-top");
   await until(() => preferences.alwaysOnTop && window.isAlwaysOnTop(), "always-on-top restored");
   await choose("mode-pet");
@@ -349,6 +352,7 @@ async function smokeControls(menu) {
   menu.getMenuItemById("settings").click();
   await until(() => settings.window?.isVisible(), "tray Settings callback showed an independent window");
   const first = settings.window;
+  await until(() => first.isFocused() && first.isAlwaysOnTop(), "focused Settings is interactive above a pinned pet");
   const settingsId = first.id;
   const placed = first.getBounds();
   assert.deepEqual(fitBounds(placed, screen.getDisplayMatching(placed).workArea), placed);
@@ -391,6 +395,21 @@ async function smokeControls(menu) {
   command("show");
   assert.equal(window.isVisible(), true);
   assert.equal(preferences.clickThrough, false);
+  assert.equal(window.isAlwaysOnTop(), true, "restoring the pinned pet while Settings is open preserves native topmost state");
+  await until(() => window.webContents.executeJavaScript(`document.querySelector('[data-command="toggle-top"]').getAttribute('aria-pressed') === 'true'`),
+    "the toolbar pin reflects native topmost state");
+  await first.webContents.executeJavaScript("pawmetrySettings.update('alwaysOnTop', false)");
+  assert.equal(window.isAlwaysOnTop(), false, "Settings can unpin the pet while both windows are visible");
+  assert.equal(first.isAlwaysOnTop(), false);
+  await first.webContents.executeJavaScript("pawmetrySettings.update('alwaysOnTop', true)");
+  assert.equal(window.isAlwaysOnTop(), true, "Settings can re-pin the pet while both windows are visible");
+  window.focus();
+  await until(() => !first.isFocused() && !first.isAlwaysOnTop(), "Settings releases topmost state when it loses focus");
+  assert.equal(window.isAlwaysOnTop(), true);
+  first.minimize();
+  await until(() => first.isMinimized() && !first.isAlwaysOnTop(), "minimizing Settings releases its own topmost state");
+  assert.equal(window.isAlwaysOnTop(), true);
+  await openSettings();
   first.hide();
   await pet("settings");
   await until(() => settings.window?.isVisible(), "pet Settings button opened the window");
@@ -528,7 +547,7 @@ function selectMonitor(display) {
 function setVisible(visible) {
   if (!window || window.isDestroyed()) return;
   preferences.hidden = !visible;
-  if (visible) { window.showInactive(); checkPetViewport(); }
+  if (visible) { showPet(); checkPetViewport(); }
   else { companionMenu.close(); window.hide(); }
   updateHitTesting();
   persist();
@@ -601,8 +620,20 @@ function selectSize(size) {
 }
 
 function applyAlwaysOnTop() {
-  const visibleSettings = settings.window?.isVisible() && !settings.window.isMinimized();
-  if (window && !window.isDestroyed()) window.setAlwaysOnTop(preferences.alwaysOnTop && !visibleSettings);
+  const pinned = preferences.alwaysOnTop;
+  if (window && !window.isDestroyed() && window.isAlwaysOnTop() !== pinned) window.setAlwaysOnTop(pinned);
+  const panel = settings.window;
+  if (!panel || panel.isDestroyed()) return;
+  // Let focused Settings sit above an overlapping pinned pet, then release it on blur.
+  const bringAbovePet = pinned && panel.isVisible() && !panel.isMinimized() && panel.isFocused();
+  if (panel.isAlwaysOnTop() !== bringAbovePet) panel.setAlwaysOnTop(bringAbovePet);
+}
+
+function showPet() {
+  window.showInactive();
+  applyAlwaysOnTop();
+  // Showing or replacing the pet must preserve the stacking of focused Settings.
+  if (settings.window?.isAlwaysOnTop()) settings.window.moveTop();
 }
 
 function setClickThrough(enabled) {
@@ -766,7 +797,9 @@ async function start() {
     assert.deepEqual(window.getSize(), [...dimensions.dashboard.small]);
     assert.equal(preferences.petSize, "large");
     assert.equal(preferences.theme, "light");
-    console.log("Desktop restarted with saved window bounds and independent pet size.");
+    assert.equal(preferences.alwaysOnTop, true);
+    assert.equal(window.isAlwaysOnTop(), true, "a fresh window honors the saved pin preference");
+    console.log("Desktop restarted with saved window bounds, independent pet size, and pin preference.");
     app.exit(0);
     return;
   }
@@ -784,6 +817,7 @@ async function start() {
         selectSize(size);
         const [width, height] = dimensions[mode][size];
         assert.deepEqual(window.getSize(), [width, height], "native size after preset change");
+        assert.equal(window.isAlwaysOnTop(), true, "layout and size changes preserve native topmost state");
         await until(async () => {
           try { return await window.webContents.executeJavaScript(`innerWidth === ${width} && innerHeight === ${height} && document.body.dataset.layout === '${mode}'`); }
           catch { return false; }
@@ -813,6 +847,7 @@ async function start() {
     await until(() => original.isDestroyed() && window.isVisible() && viewport?.width === window.getContentBounds().width,
       "the companion replaced a stale renderer and retained its accepted bounds");
     assert.deepEqual(window.getSize(), [...dimensions.dashboard.small]);
+    assert.equal(window.isAlwaysOnTop(), true, "the replacement renderer window preserves native topmost state");
     console.log("Desktop restored a stale renderer without resetting desktop state.");
     await smokeControls(menu);
     if (process.platform === "win32") await smokeActivity();
@@ -944,8 +979,7 @@ function checkPetViewport() {
       window = replacement;
       viewport = undefined;
       mouseIgnored = false;
-      applyAlwaysOnTop();
-      replacement.showInactive();
+      showPet();
       updateHitTesting();
       replacement.webContents.send("pawmetry:request-viewport");
       paint();
