@@ -1,0 +1,44 @@
+# Installed dependencies and caches
+node_modules/
+.npm/
+.cache/
+.vite/
+.vitest/
+*.tsbuildinfo
+
+# Build, packaging and test output
+dist/
+out/
+build/
+release/
+artifacts/
+coverage/
+test-results/
+playwright-report/
+*.vsix
+*.log
+
+# Local environment and signing materials
+.env
+.env.*
+!.env.example
+.npmrc.local
+*.pfx
+*.p12
+*.pem
+
+# Local editor and OS state
+.vs/
+.vscode/settings.json
+.vscode/*.local.json
+*.code-workspace
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Provider-local settings and accidental state copies
+/.codex/
+/.claude/settings.local.json
+/.github/copilot/settings.local.json
+/auth.json
+/rollout-*.jsonl
