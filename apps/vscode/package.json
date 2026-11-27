@@ -1,0 +1,36 @@
+{
+  "name": "pawmetry",
+  "displayName": "Pawmetry Public Preview",
+  "publisher": "renzangelo",
+  "description": "Local Codex quota indicators for the Pawmetry Windows companion.",
+  "version": "0.1.5",
+  "license": "MIT",
+  "pricing": "Free",
+  "repository": { "type": "git", "url": "https://github.com/RenzAngelo/pawmetry.git" },
+  "bugs": { "url": "https://github.com/RenzAngelo/pawmetry/issues" },
+  "private": true,
+  "preview": true,
+  "engines": { "vscode": "^1.109.0" },
+  "main": "./extension.cjs",
+  "extensionKind": ["ui"],
+  "activationEvents": ["onStartupFinished"],
+  "capabilities": { "untrustedWorkspaces": { "supported": false } },
+  "contributes": {
+    "views": { "explorer": [{ "id": "pawmetry.controls", "name": "Pawmetry", "visibility": "collapsed" }] },
+    "commands": [
+      { "command": "pawmetry.startCompanion", "title": "Pawmetry: Start Companion" },
+      { "command": "pawmetry.refreshQuota", "title": "Pawmetry: Refresh Codex Quota" },
+      { "command": "pawmetry.connectDesktop", "title": "Pawmetry: Connect to Companion" },
+      { "command": "pawmetry.showDesktop", "title": "Pawmetry: Show Companion" },
+      { "command": "pawmetry.hideDesktop", "title": "Pawmetry: Hide Companion" },
+      { "command": "pawmetry.desktopSettings", "title": "Pawmetry: Open Companion Settings" },
+      { "command": "pawmetry.pauseAnimations", "title": "Pawmetry: Pause Animations" },
+      { "command": "pawmetry.resumeAnimations", "title": "Pawmetry: Resume Animations" },
+      { "command": "pawmetry.pauseMonitoring", "title": "Pawmetry: Pause Monitoring" },
+      { "command": "pawmetry.resumeMonitoring", "title": "Pawmetry: Resume Monitoring" },
+      { "command": "pawmetry.exitCompanion", "title": "Pawmetry: Exit Companion" },
+      { "command": "pawmetry.nextSimulation", "title": "Pawmetry: Next Simulation Scenario" },
+      { "command": "pawmetry.stopSimulation", "title": "Pawmetry: Stop Simulation" }
+    ]
+  }
+}

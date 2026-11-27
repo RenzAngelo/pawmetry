@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "frameWidth": 128,
+  "frameHeight": 128,
+  "anchorX": 64,
+  "anchorY": 112,
+  "facing": "mirror",
+  "clips": {
+    "idle": { "frames": 4, "fps": 4, "loop": true },
+    "walking": { "frames": 6, "fps": 8, "loop": true },
+    "running": { "frames": 8, "fps": 14, "loop": true },
+    "slow-walking": { "frames": 4, "fps": 5, "loop": true },
+    "exhaustion": { "frames": 4, "fps": 3, "loop": true },
+    "sleeping": { "frames": 2, "fps": 2, "loop": true },
+    "working": { "frames": 6, "fps": 10, "loop": true },
+    "waiting": { "frames": 4, "fps": 5, "loop": true },
+    "celebration": { "frames": 8, "fps": 12, "loop": false },
+    "unknown": { "frames": 4, "fps": 3, "loop": true }
+  }
+}

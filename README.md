@@ -1,29 +1,40 @@
 # Pawmetry
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/pawmetry/logo-dark.svg">
+  <img src="assets/branding/pawmetry/logo-light.svg" width="310" alt="Pawmetry logo">
+</picture>
+
 **Your AI's pulse, brought to life.**
 
-Pawmetry is a planned free, open-source, privacy-first desktop pet and VS Code extension. Its expressions and movement will reflect verified AI coding-agent activity and usage limits. The pet is designed to stay on the Windows desktop when VS Code is minimized.
+Pawmetry turns Codex usage limits into an animated Windows desktop companion. See the short-term allowance as **energy** and the long-term allowance as **stamina**. The companion stays available when VS Code is minimized, and a companion VS Code extension shows the same readings from one shared quota monitor.
 
-## Project status
+Pawmetry is an independent third-party application. It is not an official OpenAI product. The name is a working name pending trademark review.
 
-Phase 0 and Phase 1 are complete for review. This repository contains the product definition, technical feasibility and implementation plan. Windows 11 x64 and VS Code desktop are the first target, with OpenAI Codex as the first integration candidate. Claude Code and GitHub Copilot are subsequent candidates. Pawmetry has yet to pass independent runtime testing with any provider.
+## Windows single-install preview
 
-The first prototype will test whether a separately launched Codex App Server can report matching account quota, whether an opted-in hook can report activity from the stock Codex extension, and whether the desktop and editor show the same simulated state while minimizing or closing VS Code. [Feasibility findings](FEASIBILITY.md) · [Development plan](DEVELOPMENT_PLAN.md)
+- Cat, the first Pawmetry mascot, with genuine Codex quota, remaining percentages, local reset times, and countdowns in the v0.1.5 release candidate.
+- A transparent pet-only view, compact view, and dashboard with independent pet and window sizes.
+- Desktop positioning, always-on-top, theme and opacity settings, reduced motion, click-through, and tray recovery.
+- VS Code status indicators and controls for the same local companion. The desktop can query the installed Codex bundle independently of the editor process.
+- Unavailable or stale quota is shown without estimated values.
 
-## Project documents
+The supported target is Windows 11 x64 with the local OpenAI Codex extension for VS Code signed in via ChatGPT. Other operating systems, remote VS Code hosts, API-key usage, and other providers are outside this preview. Account allowances can be shared across projects. Workspace labels and the provider's upstream data age may be unavailable.
 
-| Document | Contents |
-| --- | --- |
-| [Product brief](PRODUCT_BRIEF.md) | Vision, audience, product boundaries and success measures |
-| [Requirements](REQUIREMENTS.md) | Functional and privacy requirements |
-| [Feasibility](FEASIBILITY.md) | Evidence, provider interfaces, workstation inventory and remaining risks |
-| [Architecture](ARCHITECTURE.md) | Proposed modules, normalized state, local IPC and stack |
-| [Development plan](DEVELOPMENT_PLAN.md) | Proof of concept, MVP, milestones and next task |
-| [Security](SECURITY.md) | Data boundaries, threat model and consent |
-| [Test plan](TEST_PLAN.md) | Acceptance and support criteria |
-| [Third-party notices](THIRD_PARTY_NOTICES.md) | Prior art, licenses and artwork policy |
-| [Contributor guidance](AGENTS.md) | Repository rules and phase boundaries |
+## Install and connect
 
-The Git baseline uses the existing `main` branch and `origin` remote. The [ignore rules](.gitignore) cover generated artifacts and common local files. Review changes locally with `git status --short`. Application setup instructions will follow an approved implementation milestone.
+1. Verify the Windows VSIX against its SHA-256 checksum and install it with **Extensions → Install from VSIX**.
+2. In trusted local VS Code, click **Start Pawmetry** in the status bar and confirm live Codex quota access.
+3. The companion connects to Codex. Manage quota access in **Settings → Connections**. Use the tray to hide or exit Pawmetry.
 
-Pawmetry is an independent project. The name is provisional pending trademark clearance. A project source license remains to be selected before public distribution.
+See the [installation and troubleshooting guide](INSTALLATION.md) for platform requirements, unsigned package behavior, and removal.
+
+## Privacy and architecture
+
+Pawmetry runs locally. It leaves sign-in and provider credentials with Codex and starts no inference turns. The companion launches a separate Codex App Server for read-only quota requests. Electron owns the companion and quota cache. The TypeScript VS Code extension reads the same quota over authenticated localhost IPC. Pawmetry operates without analytics, a cloud backend, or a separate paid API. Live quota availability still depends on the user's Codex account. [Privacy statement](PRIVACY.md) · [Architecture](ARCHITECTURE.md) · [Security](SECURITY.md)
+
+## Coming soon
+
+Native Codex prompt activity is the next priority. The experimental integration is kept out of the preview. Cat’s preview motion reflects account quota. Additional providers and mascots are planned.
+
+Build from source with [CONTRIBUTING.md](CONTRIBUTING.md). Once the repository is public, you can [star Pawmetry](https://github.com/RenzAngelo/pawmetry), [report a bug or request a feature](https://github.com/RenzAngelo/pawmetry/issues), or [open a pull request](https://github.com/RenzAngelo/pawmetry/pulls). See the [release notes](RELEASE_NOTES.md), [MIT source license](LICENSE), and [separate artwork terms](ARTWORK.md).

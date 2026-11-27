@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+<title>Pawmetry</title>
+<link rel="stylesheet" href="./tokens.css">
+<link rel="stylesheet" href="./style.css">
+<main class="card">
+  <header class="drag-bar" title="Drag to move Pawmetry"><strong>Pawmetry</strong><span id="mode">Simulation</span></header>
+  <nav class="commands" aria-label="Companion controls">
+    <button type="button" data-command="toggle-top" title="Always on top" aria-label="Always on top" aria-pressed="true"><i class="icon icon-pin" aria-hidden="true"></i></button>
+    <button type="button" data-command="settings" title="Open Settings" aria-label="Open Settings"><i class="icon icon-settings" aria-hidden="true"></i></button>
+    <button type="button" data-command="hide" title="Hide to tray" aria-label="Hide to tray"><i class="icon icon-minus" aria-hidden="true"></i></button>
+    <button type="button" data-command="more" title="More options" aria-label="More options" aria-haspopup="menu" aria-expanded="false"><i class="icon icon-ellipsis" aria-hidden="true"></i></button>
+  </nav>
+  <div class="stage" aria-hidden="true"><div class="pet-position"><div class="placeholder"><i></i><i></i></div><div class="cat-sprite" hidden><img alt="" draggable="false"></div></div></div>
+  <p id="pose" role="status">Starting</p>
+  <div id="energy-group" class="details"><div class="metric"><label for="energy">Energy</label><meter id="energy" max="100" value="0"></meter><output id="energy-text">—</output></div>
+  <small id="energy-reset"></small></div>
+  <div id="stamina-group" class="details"><div class="metric"><label for="stamina">Stamina</label><meter id="stamina" max="100" value="0"></meter><output id="stamina-text">—</output></div>
+  <small id="stamina-reset"></small></div>
+</main>
+<script src="./renderer.js"></script>
+</html>

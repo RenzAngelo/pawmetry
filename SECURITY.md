@@ -1,39 +1,25 @@
-# Security and privacy
+# Security
 
-Pawmetry is designed to inspect limited provider facts and keep them on the local machine. Simulation runs without provider access. Real integration starts only after explicit user action and the relevant checks in the [test plan](TEST_PLAN.md).
+## Preview boundaries
 
-## Data boundary
+The bundled extension asks for live quota consent before first launch or restart into an updated build. Later starts remember the choice, and an explicit desktop opt-out keeps quota access off. The standalone build asks for opt-in each run. The desktop makes a fixed stdio exchange with an isolated Codex App Server, using an eligible executable from the local OpenAI VS Code extension. Executable discovery checks the extension manifest and rejects ambiguous or redirected paths. It never searches the current project or PATH for the runtime. The child uses a fixed argument vector, no shell, a transient working directory, bounded responses, timeouts and a minimal environment. Provider stderr and non-quota data are discarded. [App Server authentication](https://learn.chatgpt.com/docs/app-server#authentication-modes)
 
-| Permitted data | Handling |
-| --- | --- |
-| Supported quota metrics, units, window durations and reset times | Validate at ingress and hold in memory. Drop fields outside the schema |
-| Enumerated activity and availability, safe correlation and observation timestamps | Keep ephemeral. Convert provider session identifiers to process-local correlation keys if needed. Clear on disconnect or source change |
-| Product preferences and display placement | Persist locally with safe defaults. Keep provider histories out of settings |
-| Troubleshooting | Use fixed health codes and versions. Keep diagnostic logs off by default and exclude payloads, identities and filesystem paths |
+Renderer windows load local assets with a restrictive content security policy, context isolation, sandboxing, disabled Node integration and disabled DevTools. The main process validates the exact sending renderer, main frame, action and bounded inputs. The packaged Windows runtime disables RunAsNode, Node environment options, Node CLI inspection and Chromium remote debugging switches. The default Electron application is removed. [Electron security](https://www.electronjs.org/docs/latest/tutorial/security) · [Electron fuses](https://www.electronjs.org/docs/latest/tutorial/fuses)
 
-Never read, extract, store or transmit provider authentication credentials. That includes credential files, environment secrets, keychains and browser sessions. Leave sign-in, storage and refresh to Codex. Avoid API-key, externally managed token, account mutation, credit redemption and private HTTP interfaces. A standard Codex subprocess can contact its provider for an approved read. Pawmetry creates no external analytics, crash-reporting uploads or background update checks by default. Review the workload's provider egress separately because the provider process has its own policy and settings. [Codex authentication modes](https://learn.chatgpt.com/docs/app-server#authentication-modes)
+The companion binds IPv4 loopback only. IPC version 2 authenticates both peers with fresh nonces and a rotating per-process capability. A validated descriptor in Local AppData uses a DACL restricted to the current Windows logon SID. The protocol accepts one bounded request per connection for quota status, refresh or an enumerated desktop control. It provides no event publisher, shell or enrollment route. A restart invalidates the old listener and rotates the capability. A stale descriptor can be replaced after its previous listener fails authentication. [Windows logon SID isolation](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights)
 
-Never collect prompts, source code, transcripts, conversation text, tool inputs or outputs. Prefer interfaces that omit these fields. If a documented hook supplies a mixed envelope, retain only the allowlisted event identifier and minimal correlation/timing data at ingress. Exclude any hook if a safe projection cannot be demonstrated. Never serialize, log, forward or open paths from the envelope. Apply the same checks to errors, unexpected server requests, inherited environment, child stderr and crash handling.
+## Remaining limits
 
-## Consent and controls
+- The single-install extension starts only the fixed executable under its own extension directory after an explicit command in trusted local Windows x64 VS Code. It checks the executable digest recorded by the package, rejects redirected launch targets, and uses a reduced child environment without shell execution. The package and DLLs still rely on the installed extension and same-user trust boundary. Updates use an authenticated companion build identity and an explicit restart confirmation. The preview includes no background updater or activity hooks.
 
-- Obtain explicit consent for each provider or workspace hook change. Preview the exact changes, executable, purpose and uninstall path. Honor provider trust and organization policy.
-- Prefer a disposable trusted workspace for experiments. User-wide configuration requires separate consent. Preserve existing hooks and use conflict-aware rollback that removes only the Pawmetry entry.
-- Use fixed code from an approved install location. Do not accept workspace-controlled executable paths, shell commands, arguments or URLs. Apply time bounds, neutral output and failure behavior that leaves provider decisions to the provider and user.
-- Store per-user settings and use standard-user privileges. Default startup, notifications and sound to off. Handle all errors without prompting for elevation.
+- Processes already running as the same Windows user can interfere with the local application and its files. An administrator can also change them. A separate real Windows logon test remains pending.
+- The portable package is unsigned. Artifact checksums identify the reviewed package bytes. Distribution identity and policy enforcement depend on the download channel and Windows configuration.
+- Automated runtime tests cover a non-elevated administrator-linked Windows token. The maintainer reported a successful v0.1.5 VSIX install and launch on a standard Windows account with no warning. Windows policy can vary by system. [Manual acceptance](MANUAL_TESTS.md#single-install-preview)
+- Pawmetry has no updater and uses the installed Codex extension. Review each candidate for Electron security fixes and repeat compatibility checks if the provider changes its interface.
+- Native activity enrollment and the experimental helper are excluded from both archives. The experiment remains on a separate development branch.
 
-## Trust boundaries
+See the [privacy statement](PRIVACY.md) for stored data and [installation guide](INSTALLATION.md) for cleanup and Windows security warnings.
 
-| Boundary | Controls |
-| --- | --- |
-| Desktop renderer → main | Local packaged resources, restrictive CSP, context isolation, renderer sandbox and Node integration disabled. Deny unexpected navigations, windows and permission requests. Expose typed preload functions and validate sender, frame and schema |
-| VS Code host or hook → desktop | Current user and logon session ACL with remote clients rejected. Validate version, framing, sizes, rates, role and payload. Separate publishing from control. Reject arbitrary commands, paths, process launch, provider RPC forwarding and file access |
-| Desktop → provider process | Explicit user-selected or verified supported executable and fixed stdio arguments without a shell. Allowlist the quota RPC, cap output and time, supervise only processes Pawmetry owns and fail closed on unexpected messages. Review startup configuration effects and do not collect provider debug output |
-| Workspace and assets | Gate sensitive extension commands at execution with Workspace Trust. Use original static assets in the MVP. Future custom packs require bounded image/manifest parsing with no scripts or external resources |
-| CI and packages | Pin reviewed dependencies and actions, scan lockfile changes, use least-privilege build workflows and keep signing credentials out of PR builds. Verify the contents of both packages before distribution |
+## Report a vulnerability
 
-Processes already executing as the same Windows user can interfere with that user's apps. Treat endpoint checks, role separation and rejection of unsupported commands as defense in depth. Test rights and failure behavior explicitly. [Electron security](https://www.electronjs.org/docs/latest/tutorial/security) · [Windows pipe ACLs](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights) · [VS Code Workspace Trust](https://code.visualstudio.com/api/extension-guides/workspace-trust) · [GitHub Actions security](https://docs.github.com/en/actions/reference/security/secure-use)
-
-## Vulnerability reports
-
-Use a private channel agreed with the maintainer during the research phase. Provide versions, impact and a synthetic reproduction. Exclude provider data and credentials. Select and document a permanent private reporting channel before public release.
+Use **Security → Report a vulnerability** once private reporting is enabled in the public repository. Until then, use the private contact provided with a beta build. Include the build ID, impact, and a synthetic reproduction. Keep credentials, provider payloads and personal project details out of reports.

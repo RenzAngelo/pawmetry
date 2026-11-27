@@ -10,6 +10,7 @@ Developers, students and software engineers switch between editors, terminals an
 - Represent supported short-term quota as energy and long-term quota as stamina. Make provider scope and availability clear in the dashboard. Keep an unknown state whenever data is unavailable, stale or ambiguous.
 - Animate real agent events, such as tool work, only when the provider exposes reliable evidence. Preserve the user's control over any integration or hook configuration.
 - Support one original character first, with sprite animation, size and speed preferences, and reduced motion. Provide an offline simulation for learning, demos and testing without consuming usage.
+- The first mascot is Cat. Future mascot ideas include Fox, Dragon, Bunny, and Robot.
 
 ## Users and sequencing
 
@@ -23,4 +24,4 @@ First target Windows 11 x64 and VS Code desktop. Start with OpenAI Codex researc
 
 ## Success for the first product slice
 
-The pet stays visible and controllable when the editor is minimized. The companion and dashboard agree on known quotas and activity, reflect loss of freshness, and clearly label simulation. A user can operate the product with standard Windows privileges and use simulation offline. The intended product is free and open source with original art. Trademark clearance and project licensing remain pending.
+The preview pet stays visible and controllable when the editor is minimized. The companion and VS Code indicator agree on known account quotas, reflect loss of freshness, and clearly label simulation. A standard Windows account is the intended deployment target. The preview uses temporary art. Original mascot artwork, native activity, trademark clearance and project licensing remain separate decisions.
