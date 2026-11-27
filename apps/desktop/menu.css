@@ -1,0 +1,10 @@
+body { margin: 0; color: var(--text); background: var(--surface); }
+main { min-height: 100vh; padding: 6px; }
+.caption { padding: 3px 9px 2px; color: var(--muted); font-size: 11px; }
+button { display: flex; gap: 10px; align-items: center; min-height: 36px; width: 100%; padding: 6px 9px;
+  border: 0; border-radius: var(--radius-small); color: var(--text); background: transparent; text-align: start; cursor: pointer; }
+button:hover:not(:disabled), button:focus-visible { background: var(--hover); }
+.selected { margin-inline-start: auto; color: var(--accent); visibility: hidden; }
+[aria-checked="true"] .selected { visibility: visible; }
+hr { margin: 3px 6px; border: 0; border-top: 1px solid var(--border); }
+.danger { color: var(--danger); }

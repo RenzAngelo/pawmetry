@@ -1,6 +1,8 @@
 # Third-party notices and prior art
 
-Reviewed on 2026-11-25. These upstream projects informed the research. The repository includes no upstream code, artwork or runtime dependencies.
+Reviewed on 2026-11-25. The desktop prototype depends on Electron 45.5.0 under the MIT license. See the lockfile for transitive packages. [Electron license](https://github.com/electron/electron/blob/v45.5.0/LICENSE)
+
+The desktop vendors 22 unmodified interface SVGs from `lucide-static` 0.468.0 under ISC. The package includes icons derived from Feather under MIT. Both license texts ship beside the SVGs in the portable desktop. These files are interface controls and are independent of the pet artwork. [Lucide package](https://www.npmjs.com/package/lucide-static/v/0.468.0) · [Lucide license](apps/desktop/icons/LICENSE) · [Feather license](apps/desktop/icons/LICENSE.feather)
 
 | Project and upstream license | Approach documented by maintainers | Pawmetry takeaway |
 | --- | --- | --- |
@@ -11,4 +13,8 @@ Reviewed on 2026-11-25. These upstream projects informed the research. The repos
 
 Before incorporating any dependency or asset, record its exact version or revision, source, license and required attribution. Review packaged dependencies and reproduce any required notices in both the desktop installer and the VSIX. Verify asset rights independently of repository license badges. Keep original artwork and sounds with an authorship and licensing record.
 
-Provider and editor names identify potential integrations. Pawmetry is independent. No affiliation, compatibility or endorsement is implied. The Pawmetry source license, name clearance and public publisher identity are pending.
+Provider and editor names identify potential integrations. Pawmetry is independent. No affiliation, compatibility or endorsement is implied. Pawmetry's original source code is licensed under [MIT](LICENSE). Name clearance and the public publisher identity are pending.
+
+The Windows portable preview and the single-install VSIX include Electron's runtime and bundled Chromium notices. The standalone preview's optional editor-only VSIX uses the runtime already provided by VS Code. The public preview contains no Go runtime or additional mascot pack.
+
+The release build uses `resedit` 3.1.0 and its `pe-library` dependency to embed the Windows executable icon. Both are MIT build-time dependencies and are omitted from the runtime and VSIX. VSCE is also a build tool. [Resource editor license](https://github.com/jet2jet/resedit-js/blob/main/LICENSE) · [PE library license](https://github.com/jet2jet/pe-library-js/blob/main/LICENSE)

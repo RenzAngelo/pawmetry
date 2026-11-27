@@ -42,3 +42,8 @@ Desktop.ini
 /.github/copilot/settings.local.json
 /auth.json
 /rollout-*.jsonl
+
+# Local Cat reference art, drafts and review outputs
+/assets/mascots/cat/reference/
+/assets/mascots/cat/drafts/
+/assets/mascots/cat/review/

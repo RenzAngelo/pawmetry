@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 413 128" role="img" aria-label="Pawmetry logo" color="#75F0D7">
+  <title>Pawmetry logo</title>
+  <rect width="413" height="128" rx="24" fill="#0C1A1D"/>
+  <defs>
+    <mask id="pulse" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+      <path fill="white" d="M0 0h128v128H0z"/>
+      <path d="M31 87h20l8-13 10 23 7-10h21" fill="none" stroke="black" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g fill="currentColor">
+    <ellipse cx="32" cy="52" rx="10" ry="14" transform="rotate(-25 32 52)"/>
+    <ellipse cx="52" cy="37" rx="10.5" ry="15.5" transform="rotate(-9 52 37)"/>
+    <ellipse cx="76" cy="37" rx="10.5" ry="15.5" transform="rotate(9 76 37)"/>
+    <ellipse cx="96" cy="52" rx="10" ry="14" transform="rotate(25 96 52)"/>
+    <path mask="url(#pulse)" d="M27 89c0-10 7-17 15-23 7-5 13-10 22-10s15 5 22 10c8 6 15 13 15 23 0 12-8 19-19 19-7 0-13-4-18-4s-11 4-18 4c-11 0-19-7-19-19Z"/>
+  </g>
+  <text x="123" y="83" fill="#F3FBF9" font-family="Segoe UI, Arial, sans-serif" font-size="52" font-weight="700" letter-spacing="-2">Pawmetry</text>
+</svg>

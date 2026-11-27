@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+<title>Pawmetry Settings</title>
+<link rel="stylesheet" href="./tokens.css">
+<link rel="stylesheet" href="./settings.css">
+<div class="shell">
+  <aside>
+    <header><img src="../../assets/branding/pawmetry/app.png" alt=""><strong>Pawmetry</strong><span>Settings</span></header>
+    <nav aria-label="Settings sections">
+      <button data-section="general" aria-controls="general"><i class="icon icon-sliders-horizontal" aria-hidden="true"></i>General</button>
+      <button data-section="connections" aria-controls="connections"><i class="icon icon-link" aria-hidden="true"></i>Connections</button>
+      <button data-section="appearance" aria-controls="appearance"><i class="icon icon-palette" aria-hidden="true"></i>Appearance</button>
+      <button data-section="behavior" aria-controls="behavior"><i class="icon icon-activity" aria-hidden="true"></i>Behavior</button>
+      <button data-section="shortcuts" aria-controls="shortcuts"><i class="icon icon-keyboard" aria-hidden="true"></i>Shortcuts</button>
+      <button data-section="about" aria-controls="about"><i class="icon icon-info" aria-hidden="true"></i>About</button>
+    </nav>
+  </aside>
+  <main id="content">
+    <p id="settings-error" role="status"></p>
+    <section id="general" aria-labelledby="general-title">
+      <h1 id="general-title" tabindex="-1">General</h1>
+      <div class="panel settings-grid" id="general-fields"></div>
+    </section>
+    <section id="connections" aria-labelledby="connections-title" hidden>
+      <h1 id="connections-title" tabindex="-1">Connections</h1>
+      <div class="panel">
+        <h2>Codex account quota</h2>
+        <p id="quota-state" class="state" role="status">Checking</p>
+        <p id="codex-install" role="status"></p>
+        <button data-action="detect-codex">Check for Codex</button>
+          <p id="quota-details">Show energy, stamina and reset times for your Codex account.</p>
+        <div class="actions"><button class="primary" id="toggle-quota">Enable live quota</button><button data-action="refresh">Refresh quota</button></div>
+      </div>
+        <div class="panel"><h2>Codex prompt activity</h2><p>Coming soon. The current preview tracks account quota. The pet will react to prompts once activity monitoring is available.</p></div>
+    </section>
+    <section id="appearance" aria-labelledby="appearance-title" hidden>
+      <h1 id="appearance-title" tabindex="-1">Appearance</h1>
+      <div class="panel settings-grid" id="appearance-fields"></div>
+    </section>
+    <section id="behavior" aria-labelledby="behavior-title" hidden>
+      <h1 id="behavior-title" tabindex="-1">Behavior</h1>
+      <div class="panel settings-grid" id="behavior-fields"></div>
+      <div class="panel"><h2>Monitoring</h2><button id="toggle-monitoring">Pause monitoring</button></div>
+    </section>
+    <section id="shortcuts" aria-labelledby="shortcuts-title" hidden>
+      <h1 id="shortcuts-title" tabindex="-1">Shortcuts</h1>
+      <div class="panel settings-grid" id="shortcut-fields"></div>
+    </section>
+    <section id="about" aria-labelledby="about-title" hidden>
+      <h1 id="about-title" tabindex="-1">About</h1>
+      <div class="panel"><div class="about-brand" role="img" aria-label="Pawmetry"></div><p id="build-info"></p><p id="build-executable" class="file-path"></p><p>Windows companion for Codex quota. Independent of OpenAI. Interface icons by Lucide.</p></div>
+      <div class="panel"><h2>Coming soon</h2><p>Agent activity, quota alerts, and additional providers.</p></div>
+    </section>
+  </main>
+</div>
+<script src="./settings.js"></script>
+</html>

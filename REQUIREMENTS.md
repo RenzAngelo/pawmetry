@@ -1,48 +1,8 @@
-# Requirements
+# Public Preview requirements
 
-| Priority | Meaning |
-| --- | --- |
-| MVP | First approved product target, subject to independent validation |
-| Later | Retained for a later milestone |
-| Required | Applies whenever the relevant capability ships |
-
-## Desktop companion
-
-| ID | Priority | Requirement |
-| --- | --- | --- |
-| D1 | MVP | Independent transparent, frameless and always-on-top pet window. Remains visible during normal desktop use when VS Code is minimized or exits |
-| D2 | MVP | Drag between two monitors, restore sensible placement after a display change and configure pet size |
-| D3 | MVP | Optional click-through with a tray path to restore mouse interaction. Tray exposes show/hide, pause/resume and exit |
-| D4 | Later | Opt-in startup with Windows, notifications and sounds. Default all three to off and support disabling them |
-
-## VS Code desktop extension
-
-| ID | Priority | Requirement |
-| --- | --- | --- |
-| V1 | MVP | Persistent status indicator in an active desktop editor window and dedicated Pawmetry sidebar |
-| V2 | MVP | Show connection and source scope, supported allowance values and reset countdowns, and independently verified agent activity |
-| V3 | MVP | User settings and companion commands for show/hide and pause/resume, with a clear desktop-unavailable state |
-| V4 | Required | Work through supported VS Code APIs. Report exact supported host, provider surface and versions |
-
-## Pet behavior and customization
-
-| ID | Priority | Requirement |
-| --- | --- | --- |
-| B1 | MVP | Use applicable short-term quota for energy and long-term quota for stamina. Support independent missing windows and provider-specific models |
-| B2 | MVP | Support energetic running/play, normal walking, tired slowing/yawning, exhausted struggling/crawling, and sleep for confirmed blocking exhaustion. Simulation can demonstrate all states |
-| B3 | Required | Support thinking, working, waiting for approval, success, failure/interruption, disconnected/unknown and recharging when evidence supports them. Require a confirmed reset before showing recharging for a reset |
-| B4 | MVP | One original sprite-sheet character, configurable size and animation speed, reduced-motion mode and visibly labeled offline simulation |
-| B5 | Later | Multiple pets and validated custom character assets |
-
-## Data and compatibility
-
-| ID | Priority | Requirement |
-| --- | --- | --- |
-| P1 | Required | Local-first operation. Keep external analytics and diagnostics uploads off by default. No collection of source, prompts or conversations. Never access provider credentials |
-| P2 | Required | Prefer supported provider interfaces. Avoid undocumented private HTTP endpoints. Require explicit consent and the provider's trust review for hook configuration changes |
-| P3 | Required | Never invent percentages, reset times or activity. Expire stale data and keep ambiguous scope unknown. Calculate a displayed remaining percentage only from valid provider data |
-| P4 | Required | Use renderer context isolation, sandboxing and restricted IPC. Require no elevation for normal use. Reject arbitrary commands on every IPC boundary |
-| P5 | Required | Keep the provider contract neutral, centralize branding and independently validate each advertised integration. Respect license, artwork and trademark rights |
-| P6 | MVP | Target Windows 11 x64 and local VS Code desktop first, with verified Codex capabilities only. Evaluate WSL, remote hosts, Claude Code and Copilot separately |
-
-See [the test plan](TEST_PLAN.md) for acceptance and [the security design](SECURITY.md) for controls.
+- Windows 11 x64 companion with genuine Codex short- and long-term account quota when available. Remaining percentages, account-level interpretation, local reset times, countdowns, and explicit unknown states are required.
+- Independent transparent pet-only, compact and dashboard modes. Support pinning, hide, show, exit, animation and monitoring pause, window sizing, pet scaling, saved positioning, themes, opacity, reduced motion and click-through recovery.
+- One local companion manages quota for multiple trusted local VS Code windows. Editor status indicators expose values and connection health, and guide disconnected users to the portable companion.
+- Live quota starts after user opt-in. Simulation is clearly labeled and uses no provider requests.
+- Privacy boundaries and installation rules are defined in [SECURITY.md](SECURITY.md) and [INSTALLATION.md](INSTALLATION.md).
+- Native activity, alert delivery, other providers, custom artwork and usage history are deferred. The placeholder shows sleeping only in simulation with explicit blocking evidence until the live provider can establish an actual block.
