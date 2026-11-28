@@ -2,7 +2,7 @@
 
 Pawmetry is a local-first desktop pet and VS Code extension. Read [the product brief](PRODUCT_BRIEF.md), [feasibility findings](FEASIBILITY.md) and [security requirements](SECURITY.md) before changing its design.
 
-Use [Contributing](CONTRIBUTING.md) for a fresh Windows setup and [the roadmap](DEVELOPMENT_PLAN.md) to find the next development tasks.
+At the start of a new session, read [Development status](DEVELOPMENT_STATUS.md) for the current release, branch and pending checks. Use [Contributing](CONTRIBUTING.md) for a fresh Windows setup and [the roadmap](DEVELOPMENT_PLAN.md) for future work. Check the current Git branch before editing. A new session can resume from these files without the previous conversation.
 
 - The maintainer approved local development of the ordered milestones in the [development plan](DEVELOPMENT_PLAN.md). Keep live provider claims gated on validation and track deferred graphical checks in [MANUAL_TESTS.md](MANUAL_TESTS.md).
 - Use current official documentation and distinguish documented behavior, local verification, inference and open questions. Require independent runtime evidence for each provider capability and supported surface.

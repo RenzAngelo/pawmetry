@@ -2,7 +2,7 @@
 
 ## 0.1.6 Marketplace listing update
 
-This update adds a startup guide, feature summary, and GitHub feedback links to the extension's Details page. It keeps the same quota-only feature scope as v0.1.5. The publisher submitted this version to the Marketplace for verification on 2026-11-28. The public listing still showed v0.1.5 at the handoff check.
+This update adds a startup guide, feature summary, and GitHub feedback links to the extension's Details page. It keeps the same quota-only scope as v0.1.5. The public Marketplace page reported v0.1.6 on 2026-11-28. [Marketplace listing](https://marketplace.visualstudio.com/items?itemName=renzangelo.pawmetry)
 
 ## 0.1.5 Public Preview
 
