@@ -2,6 +2,8 @@
 
 Pawmetry is a local-first desktop pet and VS Code extension. Read [the product brief](PRODUCT_BRIEF.md), [feasibility findings](FEASIBILITY.md) and [security requirements](SECURITY.md) before changing its design.
 
+Use [Contributing](CONTRIBUTING.md) for a fresh Windows setup and [the roadmap](DEVELOPMENT_PLAN.md) to find the next development tasks.
+
 - The maintainer approved local development of the ordered milestones in the [development plan](DEVELOPMENT_PLAN.md). Keep live provider claims gated on validation and track deferred graphical checks in [MANUAL_TESTS.md](MANUAL_TESTS.md).
 - Use current official documentation and distinguish documented behavior, local verification, inference and open questions. Require independent runtime evidence for each provider capability and supported surface.
 - Preserve provider-neutral contracts. Keep quota, activity and connection state independent. Missing, stale or ambiguous data becomes unknown. Simulation stays visibly labeled.
