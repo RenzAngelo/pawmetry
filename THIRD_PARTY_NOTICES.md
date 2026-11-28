@@ -13,7 +13,7 @@ The desktop vendors 22 unmodified interface SVGs from `lucide-static` 0.468.0 un
 
 Before incorporating any dependency or asset, record its exact version or revision, source, license and required attribution. Review packaged dependencies and reproduce any required notices in both the desktop installer and the VSIX. Verify asset rights independently of repository license badges. Keep original artwork and sounds with an authorship and licensing record.
 
-Provider and editor names identify potential integrations. Pawmetry is independent. No affiliation, compatibility or endorsement is implied. Pawmetry's original source code is licensed under [MIT](LICENSE). Name clearance and the public publisher identity are pending.
+Provider and editor names identify potential integrations. Pawmetry is independent. No affiliation, compatibility or endorsement is implied. Pawmetry's original source code is licensed under [MIT](LICENSE). The Marketplace publisher is `renzangelo`. Trademark clearance remains pending.
 
 The Windows portable preview and the single-install VSIX include Electron's runtime and bundled Chromium notices. The standalone preview's optional editor-only VSIX uses the runtime already provided by VS Code. The public preview contains no Go runtime or additional mascot pack.
 

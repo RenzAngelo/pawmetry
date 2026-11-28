@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.6 Marketplace listing update
+
+- Added installation, quota, privacy, and feedback information to the extension's Details page.
+
+## 0.1.5 Public Preview
+
+- Published the Windows x64 VSIX as `renzangelo.pawmetry`, with the animated Cat mascot and approved Pawmetry logo.
+- Published the tested package and checksum in the GitHub prerelease.
+
 ## 0.1.4 Single-install preview · prepared for review
 
 - Windows x64 VSIX bundles the desktop companion and starts live Codex quota after consent.

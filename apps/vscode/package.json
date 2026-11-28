@@ -3,7 +3,7 @@
   "displayName": "Pawmetry Public Preview",
   "publisher": "renzangelo",
   "description": "Local Codex quota indicators for the Pawmetry Windows companion.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "license": "MIT",
   "pricing": "Free",
   "repository": { "type": "git", "url": "https://github.com/RenzAngelo/pawmetry.git" },

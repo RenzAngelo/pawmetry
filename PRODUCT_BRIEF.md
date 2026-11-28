@@ -24,4 +24,4 @@ First target Windows 11 x64 and VS Code desktop. Start with OpenAI Codex researc
 
 ## Success for the first product slice
 
-The preview pet stays visible and controllable when the editor is minimized. The companion and VS Code indicator agree on known account quotas, reflect loss of freshness, and clearly label simulation. A standard Windows account is the intended deployment target. The preview uses temporary art. Original mascot artwork, native activity, trademark clearance and project licensing remain separate decisions.
+The preview pet stays visible and controllable when the editor is minimized. The companion and VS Code indicator agree on known account quotas and reflect loss of freshness. A standard Windows account is the intended deployment target. The public preview ships Cat. Simulation is available in development. Native activity and trademark clearance remain open. [Software license](LICENSE) · [Artwork terms](ARTWORK.md)

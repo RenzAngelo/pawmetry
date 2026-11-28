@@ -97,8 +97,10 @@ if (bundledCompanion) extensionManifest.contributes.commands = extensionManifest
   .filter(({ command }) => !["pawmetry.nextSimulation", "pawmetry.stopSimulation"].includes(command));
 await writeFile(join(editor, "package.json"), JSON.stringify(extensionManifest, null, 2) + "\n");
 await cp(here("THIRD_PARTY_NOTICES.md"), join(editor, "THIRD_PARTY_NOTICES.md"));
-if (publicRelease) await copy(["LICENSE", "ARTWORK.md", "assets/mascots/cat/DISTRIBUTION.md"], editor);
-await writeFile(join(editor, "README.md"), bundledCompanion
+if (publicRelease) {
+  await copy(["LICENSE", "ARTWORK.md", "assets/mascots/cat/DISTRIBUTION.md"], editor);
+  await cp(here("apps/vscode/README.md"), join(editor, "README.md"));
+} else await writeFile(join(editor, "README.md"), bundledCompanion
   ? "# Pawmetry Windows single-install preview\n\nLeft-click **Start Pawmetry** in the bottom VS Code status bar. After the first-start confirmation, Pawmetry connects to live Codex account quota. Manage quota access in **Settings → Connections**. Prompt activity is coming in a future build. Exit Pawmetry from the tray before uninstalling the extension.\n"
   : "# Pawmetry Public Preview\n\nLocal Codex quota indicators for the Pawmetry Windows companion. Extract the companion ZIP, open Pawmetry.exe, and enable Live Codex quota from the tray.\n");
 await writeFile(join(editor, ".vscodeignore"), "**/*.log\n");
